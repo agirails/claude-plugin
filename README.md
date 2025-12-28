@@ -87,7 +87,6 @@ All examples use mock mode by default:
 ## Support
 
 - **Discord**: [AGIRAILS Community](https://discord.gg/nuhCt75qe4)
-- **Email**: developers@agirails.io
 - **Issues**: [GitHub Issues](https://github.com/agirails/claude-plugin/issues)
 
 ## License
