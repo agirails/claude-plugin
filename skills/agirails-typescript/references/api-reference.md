@@ -2,65 +2,96 @@
 
 ## ACTPClient
 
-### `ACTPClient.create(options)`
+### `ACTPClient.create(config)`
 
 Factory method to create a client instance.
 
 ```typescript
-interface CreateOptions {
+interface ACTPClientConfig {
   mode: 'mock' | 'testnet' | 'mainnet';
-  privateKey?: string;        // Required for testnet/mainnet
-  requesterAddress?: string;  // Required for mock mode
-  rpcUrl?: string;            // Optional, has defaults
-  stateDirectory?: string;    // Mock mode state persistence
+  requesterAddress: string;           // Required - your Ethereum address
+  privateKey?: string;                // Required for testnet/mainnet
+  rpcUrl?: string;                    // Optional, has defaults
+  stateDirectory?: string;            // Mock mode state persistence
+  contracts?: {                       // Contract address overrides
+    actpKernel?: string;
+    escrowVault?: string;
+    usdc?: string;
+  };
+  gasSettings?: {
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+  };
 }
 
 const client = await ACTPClient.create({
   mode: 'mock',
-  requesterAddress: '0x...',
+  requesterAddress: '0x1234567890123456789012345678901234567890',
 });
 ```
 
 ### Properties
 
 ```typescript
-client.basic      // Basic API instance
-client.standard   // Standard API instance
-client.advanced   // Advanced API instance
-client.mock       // Mock utilities (only in mock mode)
+client.basic      // BasicAdapter - simple payment methods
+client.standard   // StandardAdapter - explicit lifecycle control
+client.advanced   // IACTPRuntime - direct protocol access (same as client.runtime)
+client.runtime    // IACTPRuntime - the underlying runtime
+client.info       // { mode, address, stateDirectory }
+```
+
+### Instance Methods
+
+```typescript
+// Get the requester address (normalized to lowercase)
+client.getAddress(): string
+
+// Get the current mode
+client.getMode(): 'mock' | 'testnet' | 'mainnet'
+
+// Reset mock state (mock mode only)
+await client.reset(): Promise<void>
+
+// Mint test USDC (mock mode only)
+await client.mintTokens(address: string, amount: string): Promise<void>
+
+// Get USDC balance (mock mode only - uses wei units)
+await client.getBalance(address: string): Promise<string>
 ```
 
 ---
 
-## Basic API
+## Basic API (`client.basic`)
 
-### `client.basic.pay(options)`
+High-level, opinionated API for simple use cases.
 
-Create and fund a transaction in one call.
+### `client.basic.pay(params)`
+
+Create and fund a transaction in one call. Auto-transitions to COMMITTED.
 
 ```typescript
-interface PayOptions {
-  to: string;                  // Provider address (checksummed)
-  amount: string;              // Amount in USDC (e.g., '100.00')
-  deadline?: string;           // '+1h', '+24h', '+7d', or Unix timestamp
-  disputeWindow?: number;      // Seconds (default: 172800 = 48h)
-  serviceDescription?: string; // Optional metadata
+interface BasicPayParams {
+  to: string;                  // Provider address
+  amount: string | number;     // Amount ("100", "100.50", "100 USDC", "$100")
+  deadline?: string | number;  // '+1h', '+24h', '+7d', or Unix timestamp
+  disputeWindow?: number;      // Seconds (default: 172800 = 2 days)
 }
 
-interface PayResult {
+interface BasicPayResult {
   txId: string;        // Transaction ID (bytes32)
+  provider: string;    // Provider address
+  requester: string;   // Requester address
+  amount: string;      // Formatted: "100.00 USDC"
+  deadline: string;    // ISO 8601 timestamp
   state: string;       // 'COMMITTED'
-  amount: string;      // Formatted amount with decimals
-  fee: string;         // Platform fee
-  deadline: Date;      // Deadline as Date object
-  disputeWindowEnd: Date; // When dispute window closes
 }
 
 const result = await client.basic.pay({
-  to: '0x...',
+  to: '0xProvider...',
   amount: '100.00',
   deadline: '+24h',
 });
+console.log('Transaction ID:', result.txId);
 ```
 
 ### `client.basic.checkStatus(txId)`
@@ -68,134 +99,98 @@ const result = await client.basic.pay({
 Get transaction status with action hints.
 
 ```typescript
-interface StatusResult {
-  txId: string;
-  state: TransactionState;
-  stateCode: number;
-  amount: string;
-  fee: string;
-  requester: string;
-  provider: string;
-  deadline: Date;
-  disputeWindowEnd: Date | null;
-
-  // Action hints
-  canRelease: boolean;
-  canDispute: boolean;
-  canCancel: boolean;
-  isTerminal: boolean;
-
-  // Formatted time remaining
-  timeToDeadline: string | null;
-  timeToAutoSettle: string | null;
+interface CheckStatusResult {
+  state: string;        // Current state name
+  canAccept: boolean;   // Provider can accept (INITIATED, before deadline)
+  canComplete: boolean; // Provider can deliver (COMMITTED or IN_PROGRESS)
+  canDispute: boolean;  // Can dispute (DELIVERED, within dispute window)
 }
 
 const status = await client.basic.checkStatus('0x...');
-```
-
-### `client.basic.release(txId)`
-
-Release escrowed funds to provider.
-
-```typescript
-await client.basic.release('0x...');
-// Throws NotAuthorizedError if not requester
-// Throws InvalidStateTransitionError if not DELIVERED
-```
-
-### `client.basic.dispute(txId, options)`
-
-Raise a dispute on a delivered transaction.
-
-```typescript
-interface DisputeOptions {
-  reason: string;        // Required
-  evidenceUrl?: string;  // IPFS URL or other evidence
-  evidenceHash?: string; // SHA256 hash of evidence
+if (status.canComplete) {
+  // Provider can mark as delivered
 }
-
-await client.basic.dispute('0x...', {
-  reason: 'Service not delivered as specified',
-  evidenceUrl: 'ipfs://Qm...',
-});
-```
-
-### `client.basic.cancel(txId)`
-
-Cancel a transaction before DELIVERED state.
-
-```typescript
-await client.basic.cancel('0x...');
-// Refunds escrowed amount if any
-```
-
-### `client.basic.getBalance(address?)`
-
-Get USDC balance.
-
-```typescript
-const myBalance = await client.basic.getBalance();
-const otherBalance = await client.basic.getBalance('0x...');
-// Returns formatted string: '1234.56'
 ```
 
 ---
 
-## Standard API
+## Standard API (`client.standard`)
 
-### `client.standard.createTransaction(options)`
+Explicit lifecycle control with more flexibility.
 
-Create transaction without funding.
+### `client.standard.createTransaction(params)`
+
+Create transaction without funding (INITIATED state).
 
 ```typescript
-import { parseUnits } from 'ethers';
-
-interface CreateTransactionOptions {
+interface StandardTransactionParams {
   provider: string;
-  amount: bigint;          // USDC base units (6 decimals)
-  deadline: number;        // Unix timestamp
-  disputeWindow: number;   // Seconds
-  metadata?: string;
+  amount: string | number;     // User-friendly format
+  deadline?: string | number;  // Defaults to +24h
+  disputeWindow?: number;      // Defaults to 172800 (2 days)
+  serviceDescription?: string;
 }
 
-const tx = await client.standard.createTransaction({
-  provider: '0x...',
-  amount: parseUnits('100', 6),
-  deadline: Math.floor(Date.now() / 1000) + 86400,
-  disputeWindow: 172800,
+const txId = await client.standard.createTransaction({
+  provider: '0xProvider...',
+  amount: '100',
+  deadline: '+7d',
 });
-// tx.state === 'INITIATED'
+// Returns transaction ID, state is INITIATED
 ```
 
 ### `client.standard.linkEscrow(txId)`
 
-Lock funds in escrow.
+Lock funds in escrow. Auto-transitions INITIATED/QUOTED → COMMITTED.
 
 ```typescript
-// Approve USDC first
-await client.standard.approveUSDC(amount);
-// Then link
-await client.standard.linkEscrow('0x...');
-// State transitions to COMMITTED
+const escrowId = await client.standard.linkEscrow('0x...');
+// State is now COMMITTED
 ```
 
-### `client.standard.transitionState(txId, state, metadata?)`
+### `client.standard.transitionState(txId, newState)`
 
-Transition to new state.
+Transition to a new state.
 
 ```typescript
-type TargetState = 'QUOTED' | 'IN_PROGRESS' | 'DELIVERED';
+type TransactionState =
+  | 'INITIATED' | 'QUOTED' | 'COMMITTED' | 'IN_PROGRESS'
+  | 'DELIVERED' | 'SETTLED' | 'DISPUTED' | 'CANCELLED';
 
-interface DeliveryMetadata {
-  resultHash?: string;  // SHA256 of result
-  resultUrl?: string;   // IPFS or URL
-}
+// Provider marks work as delivered
+await client.standard.transitionState(txId, 'DELIVERED');
 
-// Provider delivers
-await client.standard.transitionState('0x...', 'DELIVERED', {
-  resultHash: '0x...',
-  resultUrl: 'ipfs://...',
+// Valid transitions:
+// INITIATED → QUOTED, COMMITTED, CANCELLED
+// QUOTED → COMMITTED, CANCELLED
+// COMMITTED → IN_PROGRESS, DELIVERED, CANCELLED
+// IN_PROGRESS → DELIVERED, CANCELLED
+// DELIVERED → SETTLED, DISPUTED
+// DISPUTED → SETTLED
+```
+
+### `client.standard.releaseEscrow(escrowId, attestationParams?)`
+
+Release escrowed funds to provider.
+
+```typescript
+// Mock mode - no attestation required
+await client.standard.releaseEscrow(escrowId);
+
+// Testnet/Mainnet - attestation REQUIRED
+await client.standard.releaseEscrow(escrowId, {
+  txId: '0x...',
+  attestationUID: '0x...',
 });
+```
+
+### `client.standard.getEscrowBalance(escrowId)`
+
+Get formatted escrow balance.
+
+```typescript
+const balance = await client.standard.getEscrowBalance('0x...');
+console.log(balance); // "100.00 USDC"
 ```
 
 ### `client.standard.getTransaction(txId)`
@@ -203,160 +198,249 @@ await client.standard.transitionState('0x...', 'DELIVERED', {
 Get full transaction details.
 
 ```typescript
-interface Transaction {
-  txId: string;
-  requester: string;
-  provider: string;
-  amount: bigint;
-  fee: bigint;
-  state: TransactionState;
-  stateCode: number;
-  deadline: number;
-  disputeWindow: number;
-  createdAt: number;
-  committedAt: number | null;
-  deliveredAt: number | null;
-  settledAt: number | null;
-  resultHash: string | null;
-  resultUrl: string | null;
-}
-
 const tx = await client.standard.getTransaction('0x...');
-```
-
-### `client.standard.getTransactions(filter)`
-
-Query multiple transactions.
-
-```typescript
-interface TransactionFilter {
-  requester?: string;
-  provider?: string;
-  participant?: string;  // Either requester or provider
-  states?: TransactionState[];
-  fromTimestamp?: number;
-  toTimestamp?: number;
-  limit?: number;
-  offset?: number;
-}
-
-const transactions = await client.standard.getTransactions({
-  participant: myAddress,
-  states: ['COMMITTED', 'DELIVERED'],
-  limit: 100,
-});
-```
-
-### `client.standard.on(event, handler)`
-
-Subscribe to events.
-
-```typescript
-type EventName =
-  | 'TransactionCreated'
-  | 'StateChanged'
-  | 'EscrowLinked'
-  | 'DisputeRaised'
-  | 'DisputeResolved';
-
-interface StateChangedEvent {
-  txId: string;
-  oldState: TransactionState;
-  newState: TransactionState;
-  timestamp: number;
-  actor: string;
-}
-
-client.standard.on('StateChanged', (event: StateChangedEvent) => {
-  console.log(`${event.txId}: ${event.oldState} → ${event.newState}`);
-});
-
-// Remove listener
-client.standard.off('StateChanged', handler);
+// Returns MockTransaction | null
 ```
 
 ---
 
-## Advanced API
+## Advanced API (`client.advanced`)
 
-### `client.advanced.kernel`
-
-Direct access to ACTPKernel contract (ethers.js Contract instance).
+Direct access to the underlying runtime (IACTPRuntime).
 
 ```typescript
-const kernel = client.advanced.kernel;
+// client.advanced is the same as client.runtime
+const runtime = client.advanced;
 
-// Read state
-const tx = await kernel.getTransaction('0x...');
-const fee = await kernel.platformFeeBps();
+// Create transaction with protocol-level params
+const txId = await runtime.createTransaction({
+  provider: '0x...',
+  requester: '0x...',
+  amount: '100000000',  // wei (USDC has 6 decimals)
+  deadline: 1735574400, // Unix timestamp
+  disputeWindow: 172800,
+});
 
-// Write (requires signer)
-const txResponse = await kernel.createTransaction(...);
-await txResponse.wait();
+// Get transaction
+const tx = await runtime.getTransaction(txId);
 
-// Query events
-const filter = kernel.filters.StateChanged('0x...');
-const events = await kernel.queryFilter(filter, fromBlock, toBlock);
-```
+// State transitions
+await runtime.transitionState(txId, 'DELIVERED');
 
-### `client.advanced.escrow`
+// Escrow operations
+await runtime.linkEscrow(txId, amount);
+await runtime.releaseEscrow(escrowId);
+const balance = await runtime.getEscrowBalance(escrowId);
 
-Direct access to EscrowVault contract.
-
-```typescript
-const escrow = client.advanced.escrow;
-const balance = await escrow.getBalance('0x...');
-```
-
-### `client.advanced.usdc`
-
-Direct access to USDC contract.
-
-```typescript
-const usdc = client.advanced.usdc;
-const allowance = await usdc.allowance(owner, spender);
-await usdc.approve(spender, amount);
+// Time interface (mock mode)
+const now = runtime.time.now();
 ```
 
 ---
 
-## Mock Utilities
+## Level 0 API - Provider/Request Primitives
 
-Only available in mock mode.
-
-### `client.mock.mint(address, amount)`
-
-Mint test USDC.
+Simple provide/request interface for service discovery.
 
 ```typescript
-await client.mock.mint('0x...', 10000);
-// Address now has 10000 USDC
+import { provide, request, serviceDirectory } from '@agirails/sdk';
+
+// Register as a provider
+const cleanup = await provide({
+  service: 'image-generation',
+  endpoint: 'https://my-agent.com/generate',
+  price: '10.00',
+});
+
+// Request a service
+const result = await request({
+  service: 'image-generation',
+  input: { prompt: 'A sunset over mountains' },
+  maxPrice: '15.00',
+});
+
+// Query service directory
+const providers = await serviceDirectory.find({
+  service: 'image-generation',
+  maxPrice: '20.00',
+});
 ```
 
-### `client.mock.advanceTime(seconds)`
+---
 
-Fast-forward time.
+## Level 1 API - Agent Abstraction
+
+Higher-level Agent class for autonomous operation.
 
 ```typescript
-await client.mock.advanceTime(3600); // 1 hour
-await client.mock.advanceTime(86400); // 1 day
+import { Agent, calculatePrice } from '@agirails/sdk';
+
+const agent = new Agent({
+  name: 'my-image-agent',
+  services: [{
+    name: 'generate',
+    handler: async (job) => {
+      const result = await generateImage(job.input);
+      return { image: result };
+    },
+    pricing: {
+      base: '5.00',
+      perUnit: '0.10',
+      unit: 'image',
+    },
+  }],
+});
+
+await agent.start();
 ```
 
-### `client.mock.reset()`
+---
 
-Clear all mock state.
+## Error Types
 
-```typescript
-await client.mock.reset();
-// All transactions and balances cleared
+### Error Hierarchy
+
+```
+ACTPError (base)
+├── Transaction Errors
+│   ├── InsufficientFundsError
+│   ├── TransactionNotFoundError
+│   ├── DeadlineExpiredError
+│   └── InvalidStateTransitionError
+├── Validation Errors
+│   ├── ValidationError
+│   ├── InvalidAddressError
+│   └── InvalidAmountError
+├── Network Errors
+│   ├── NetworkError
+│   ├── TransactionRevertedError
+│   └── SignatureVerificationError
+├── Storage Errors
+│   ├── StorageError
+│   ├── InvalidCIDError
+│   ├── UploadTimeoutError
+│   ├── DownloadTimeoutError
+│   ├── FileSizeLimitExceededError
+│   ├── StorageAuthenticationError
+│   ├── StorageRateLimitError
+│   ├── ContentNotFoundError
+│   ├── ArweaveUploadError
+│   ├── ArweaveDownloadError
+│   ├── ArweaveTimeoutError
+│   ├── InvalidArweaveTxIdError
+│   ├── InsufficientBalanceError (Irys)
+│   └── SwapExecutionError
+├── Agent/Job Errors
+│   ├── NoProviderFoundError
+│   ├── TimeoutError
+│   ├── ProviderRejectedError
+│   ├── DeliveryFailedError
+│   ├── DisputeRaisedError
+│   ├── ServiceConfigError
+│   ├── AgentLifecycleError
+│   └── QueryCapExceededError
+└── (all inherit code, message, details)
 ```
 
-### `client.mock.setBalance(address, amount)`
-
-Set exact balance.
+### Core Errors
 
 ```typescript
-await client.mock.setBalance('0x...', 500);
+import {
+  // Base
+  ACTPError,                    // Base error class
+
+  // Transaction
+  InsufficientFundsError,       // Not enough USDC for payment
+  TransactionNotFoundError,     // Transaction ID doesn't exist
+  InvalidStateTransitionError,  // Invalid state change attempt
+  DeadlineExpiredError,         // Transaction deadline passed
+
+  // Validation
+  ValidationError,              // Input validation failed
+  InvalidAddressError,          // Bad Ethereum address format
+  InvalidAmountError,           // Invalid amount (<=0, wrong format)
+
+  // Network
+  NetworkError,                 // RPC/network connection issues
+  TransactionRevertedError,     // Blockchain transaction reverted
+  SignatureVerificationError,   // Signature doesn't match signer
+} from '@agirails/sdk';
+```
+
+### Storage Errors (IPFS/Arweave)
+
+```typescript
+import {
+  StorageError,                 // Base storage error
+  InvalidCIDError,              // Invalid IPFS CID format
+  UploadTimeoutError,           // Upload timed out
+  DownloadTimeoutError,         // Download timed out
+  FileSizeLimitExceededError,   // File too large
+  StorageAuthenticationError,   // Auth failed (API key, etc.)
+  StorageRateLimitError,        // Rate limit hit, retry later
+  ContentNotFoundError,         // CID not found on network
+  ArweaveUploadError,           // Arweave upload failed
+  ArweaveDownloadError,         // Arweave download failed
+  ArweaveTimeoutError,          // Arweave operation timeout
+  InvalidArweaveTxIdError,      // Bad Arweave transaction ID
+  InsufficientBalanceError,     // Not enough Irys balance
+  SwapExecutionError,           // Token swap failed
+} from '@agirails/sdk';
+```
+
+### Agent/Job Errors (Level 0/1 API)
+
+```typescript
+import {
+  NoProviderFoundError,         // No provider for requested service
+  TimeoutError,                 // Operation timed out
+  ProviderRejectedError,        // Provider refused the job
+  DeliveryFailedError,          // Provider failed to deliver
+  DisputeRaisedError,           // Dispute was raised on transaction
+  ServiceConfigError,           // Invalid service configuration
+  AgentLifecycleError,          // Invalid agent state operation
+  QueryCapExceededError,        // Registry too large, use indexer
+} from '@agirails/sdk';
+```
+
+### Error Handling Example
+
+```typescript
+import {
+  ACTPError,
+  InsufficientFundsError,
+  InvalidStateTransitionError,
+  NetworkError
+} from '@agirails/sdk';
+
+try {
+  await client.basic.pay({ to: '0x...', amount: 100 });
+} catch (error) {
+  if (error instanceof InsufficientFundsError) {
+    console.log('Need more USDC:', error.details);
+    // { required: '100000000', available: '50000000' }
+  } else if (error instanceof InvalidStateTransitionError) {
+    console.log('Invalid transition:', error.details);
+    // { from: 'SETTLED', to: 'DELIVERED', validTransitions: [] }
+  } else if (error instanceof NetworkError) {
+    console.log('Network issue:', error.message);
+    // Retry with exponential backoff
+  } else if (error instanceof ACTPError) {
+    console.log(`ACTP Error [${error.code}]:`, error.message);
+  }
+}
+```
+
+### Error Properties
+
+All errors extending `ACTPError` have:
+
+```typescript
+interface ACTPError extends Error {
+  code: string;       // Machine-readable code (e.g., 'INSUFFICIENT_FUNDS')
+  txHash?: string;    // Related transaction hash, if any
+  details?: any;      // Additional context object
+}
 ```
 
 ---
@@ -365,14 +449,14 @@ await client.mock.setBalance('0x...', 500);
 
 ```typescript
 type TransactionState =
-  | 'INITIATED'
-  | 'QUOTED'
-  | 'COMMITTED'
-  | 'IN_PROGRESS'
-  | 'DELIVERED'
-  | 'SETTLED'
-  | 'DISPUTED'
-  | 'CANCELLED';
+  | 'INITIATED'    // 0 - Created, no escrow
+  | 'QUOTED'       // 1 - Provider quoted (optional)
+  | 'COMMITTED'    // 2 - Escrow linked, work starts
+  | 'IN_PROGRESS'  // 3 - Provider working (optional)
+  | 'DELIVERED'    // 4 - Work complete
+  | 'SETTLED'      // 5 - Payment released (terminal)
+  | 'DISPUTED'     // 6 - Under dispute
+  | 'CANCELLED';   // 7 - Cancelled (terminal)
 
-type Mode = 'mock' | 'testnet' | 'mainnet';
+type ACTPClientMode = 'mock' | 'testnet' | 'mainnet';
 ```

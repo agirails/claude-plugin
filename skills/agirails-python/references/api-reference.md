@@ -9,58 +9,69 @@ Factory method to create a client instance.
 ```python
 from agirails import ACTPClient
 
-# Options
 client = await ACTPClient.create(
-    mode: str,                    # "mock" | "testnet" | "mainnet"
-    private_key: str | None,      # Required for testnet/mainnet
-    requester_address: str | None, # Required for mock mode
-    rpc_url: str | None,          # Optional, has defaults
-    state_directory: str | None,  # Mock mode state persistence
+    mode="mock",                          # "mock" | "testnet" | "mainnet"
+    requester_address="0x123...",         # Required - your Ethereum address
+    state_directory="/path/to/state",     # Optional - mock state persistence
+    private_key="0x...",                  # Required for testnet/mainnet
+    rpc_url="https://...",                # Optional, has defaults
 )
 ```
 
 ### Properties
 
 ```python
-client.basic      # Basic API instance
-client.standard   # Standard API instance
-client.advanced   # Advanced API instance
-client.mock       # Mock utilities (only in mock mode)
-client.mode       # Current mode string
-client.address    # Wallet address
+client.basic      # BasicAdapter - simple payment methods
+client.standard   # StandardAdapter - explicit lifecycle control
+client.runtime    # IACTPRuntime - direct protocol access
+client.info       # ACTPClientInfo - mode, address, etc.
+```
+
+### Instance Methods
+
+```python
+# Get the requester address (normalized to lowercase)
+client.get_address() -> str
+
+# Get the current mode
+client.get_mode() -> Literal["mock", "testnet", "mainnet"]
+
+# Reset mock state (mock mode only)
+await client.reset() -> None
+
+# Mint test USDC (mock mode only)
+await client.mint_tokens(address: str, amount: str) -> None
+
+# Get USDC balance (mock mode only - returns wei units)
+await client.get_balance(address: str) -> str
 ```
 
 ---
 
-## Basic API
+## Basic API (`client.basic`)
 
-### `client.basic.pay(options)`
+High-level, opinionated API for simple use cases.
 
-Create and fund a transaction in one call.
+### `client.basic.pay(params)`
+
+Create and fund a transaction in one call. Auto-transitions to COMMITTED.
 
 ```python
-from dataclasses import dataclass
-from datetime import datetime
+from agirails import BasicPayParams, BasicPayResult
 
-@dataclass
-class PayResult:
-    tx_id: str
-    state: str
-    amount: str
-    fee: str
-    deadline: datetime
-    dispute_window_end: datetime
-
+# Pay using a dict
 result = await client.basic.pay({
-    "to": "0x...",              # Provider address
-    "amount": 100.00,           # Float or string
-    "deadline": "24h",          # "+1h", "+24h", "+7d", or timestamp
-    "dispute_window": 172800,   # Seconds (default: 48h)
-    "service_description": "...", # Optional
+    "to": "0xProvider...",
+    "amount": 100.00,       # Float, int, or string
+    "deadline": "+24h",     # "+1h", "+24h", "+7d", or Unix timestamp
+    "dispute_window": 172800,  # Seconds (default: 2 days)
 })
 
-print(result.tx_id)  # "0x..."
-print(result.state)  # "COMMITTED"
+# Result is a dataclass
+print(result.tx_id)      # "0x..."
+print(result.state)      # "COMMITTED"
+print(result.amount)     # "100.00 USDC"
+print(result.deadline)   # ISO 8601 string
 ```
 
 ### `client.basic.check_status(tx_id)`
@@ -68,121 +79,89 @@ print(result.state)  # "COMMITTED"
 Get transaction status with action hints.
 
 ```python
-@dataclass
-class StatusResult:
-    tx_id: str
-    state: str
-    state_code: int
-    amount: str
-    fee: str
-    requester: str
-    provider: str
-    deadline: datetime
-    dispute_window_end: datetime | None
-
-    # Action hints
-    can_release: bool
-    can_dispute: bool
-    can_cancel: bool
-    is_terminal: bool
-
-    # Formatted time remaining
-    time_to_deadline: str | None
-    time_to_auto_settle: str | None
+from agirails import CheckStatusResult
 
 status = await client.basic.check_status("0x...")
-if status.can_release:
-    await client.basic.release(status.tx_id)
-```
 
-### `client.basic.release(tx_id)`
-
-Release escrowed funds to provider.
-
-```python
-await client.basic.release("0x...")
-# Raises NotAuthorizedError if not requester
-# Raises InvalidStateTransitionError if not DELIVERED
-```
-
-### `client.basic.dispute(tx_id, reason, evidence_url=None)`
-
-Raise a dispute on a delivered transaction.
-
-```python
-await client.basic.dispute(
-    "0x...",
-    reason="Service not delivered as specified",
-    evidence_url="ipfs://Qm...",
-)
-```
-
-### `client.basic.cancel(tx_id)`
-
-Cancel a transaction before DELIVERED state.
-
-```python
-await client.basic.cancel("0x...")
-# Refunds escrowed amount if any
-```
-
-### `client.basic.get_balance(address=None)`
-
-Get USDC balance.
-
-```python
-my_balance = await client.basic.get_balance()
-other_balance = await client.basic.get_balance("0x...")
-# Returns: "1234.56"
+print(status.state)        # Current state name
+print(status.can_accept)   # Provider can accept (INITIATED, before deadline)
+print(status.can_complete) # Provider can deliver (COMMITTED or IN_PROGRESS)
+print(status.can_dispute)  # Can dispute (DELIVERED, within dispute window)
 ```
 
 ---
 
-## Standard API
+## Standard API (`client.standard`)
 
-### `client.standard.create_transaction(options)`
+Explicit lifecycle control with more flexibility.
 
-Create transaction without funding.
+### `client.standard.create_transaction(params)`
+
+Create transaction without funding (INITIATED state).
 
 ```python
-from decimal import Decimal
+from agirails import StandardTransactionParams
 
-tx = await client.standard.create_transaction({
-    "provider": "0x...",
-    "amount": Decimal("100.000000"),  # 6 decimal places for USDC
-    "deadline": 1735689600,            # Unix timestamp
-    "dispute_window": 172800,          # Seconds
-    "metadata": "optional",
+tx_id = await client.standard.create_transaction({
+    "provider": "0xProvider...",
+    "amount": 100,              # User-friendly format
+    "deadline": "+7d",          # Defaults to +24h
+    "dispute_window": 172800,   # Defaults to 2 days
+    "service_description": "Optional description",
 })
-# tx.state == "INITIATED"
+# Returns transaction ID, state is INITIATED
 ```
 
 ### `client.standard.link_escrow(tx_id)`
 
-Lock funds in escrow.
+Lock funds in escrow. Auto-transitions INITIATED/QUOTED → COMMITTED.
 
 ```python
-# Approve USDC first
-await client.standard.approve_usdc(amount)
-# Then link
-await client.standard.link_escrow("0x...")
-# State transitions to COMMITTED
+escrow_id = await client.standard.link_escrow("0x...")
+# State is now COMMITTED
 ```
 
-### `client.standard.transition_state(tx_id, state, metadata=None)`
+### `client.standard.transition_state(tx_id, new_state)`
 
-Transition to new state.
+Transition to a new state.
 
 ```python
-# Provider delivers
-await client.standard.transition_state(
-    "0x...",
-    "DELIVERED",
-    metadata={
-        "result_hash": "0x...",
-        "result_url": "ipfs://...",
-    }
-)
+from agirails import TransactionState
+
+# Provider marks work as delivered
+await client.standard.transition_state(tx_id, "DELIVERED")
+
+# Valid transitions:
+# INITIATED → QUOTED, COMMITTED, CANCELLED
+# QUOTED → COMMITTED, CANCELLED
+# COMMITTED → IN_PROGRESS, DELIVERED, CANCELLED
+# IN_PROGRESS → DELIVERED, CANCELLED
+# DELIVERED → SETTLED, DISPUTED
+# DISPUTED → SETTLED
+```
+
+### `client.standard.release_escrow(escrow_id, attestation_params=None)`
+
+Release escrowed funds to provider.
+
+```python
+# Mock mode - no attestation required
+await client.standard.release_escrow(escrow_id)
+
+# Testnet/Mainnet - attestation REQUIRED
+await client.standard.release_escrow(escrow_id, {
+    "tx_id": "0x...",
+    "attestation_uid": "0x...",
+})
+```
+
+### `client.standard.get_escrow_balance(escrow_id)`
+
+Get formatted escrow balance.
+
+```python
+balance = await client.standard.get_escrow_balance("0x...")
+print(balance)  # "100.00 USDC"
 ```
 
 ### `client.standard.get_transaction(tx_id)`
@@ -190,139 +169,280 @@ await client.standard.transition_state(
 Get full transaction details.
 
 ```python
-@dataclass
-class Transaction:
-    tx_id: str
-    requester: str
-    provider: str
-    amount: int           # Base units (6 decimals)
-    fee: int
-    state: str
-    state_code: int
-    deadline: int         # Unix timestamp
-    dispute_window: int
-    created_at: int
-    committed_at: int | None
-    delivered_at: int | None
-    settled_at: int | None
-    result_hash: str | None
-    result_url: str | None
-
 tx = await client.standard.get_transaction("0x...")
+# Returns MockTransaction | None
 ```
 
-### `client.standard.get_transactions(filter)`
+---
 
-Query multiple transactions.
+## Advanced API (`client.runtime`)
+
+Direct access to the underlying runtime (IACTPRuntime).
 
 ```python
-transactions = await client.standard.get_transactions({
-    "requester": "0x...",        # Optional
-    "provider": "0x...",         # Optional
-    "participant": "0x...",      # Either requester or provider
-    "states": ["COMMITTED", "DELIVERED"],
-    "from_timestamp": 1735600000,
-    "to_timestamp": 1735700000,
-    "limit": 100,
-    "offset": 0,
+runtime = client.runtime
+
+# Create transaction with protocol-level params
+tx_id = await runtime.create_transaction({
+    "provider": "0x...",
+    "requester": "0x...",
+    "amount": "100000000",  # wei (USDC has 6 decimals)
+    "deadline": 1735574400,  # Unix timestamp
+    "dispute_window": 172800,
 })
-```
 
-### Event Handlers
+# Get transaction
+tx = await runtime.get_transaction(tx_id)
 
-```python
-# Define handler
-async def on_state_changed(event):
-    print(f"{event.tx_id}: {event.old_state} → {event.new_state}")
+# State transitions
+await runtime.transition_state(tx_id, "DELIVERED")
 
-# Subscribe
-client.standard.on("StateChanged", on_state_changed)
+# Escrow operations
+await runtime.link_escrow(tx_id, amount)
+await runtime.release_escrow(escrow_id)
+balance = await runtime.get_escrow_balance(escrow_id)
 
-# Unsubscribe
-client.standard.off("StateChanged", on_state_changed)
-
-# Process events (for long-running processes)
-await client.standard.process_events()
+# Time interface (mock mode)
+now = runtime.time.now()
 ```
 
 ---
 
-## Advanced API
+## Level 0 API - Provider/Request Primitives
 
-### `client.advanced.kernel`
-
-Direct access to ACTPKernel contract.
+Simple provide/request interface for service discovery.
 
 ```python
-kernel = client.advanced.kernel
+from agirails import provide, request, ServiceDirectory
 
-# Read state
-tx = await kernel.get_transaction("0x...")
-fee = await kernel.platform_fee_bps()
-
-# Write (requires signer)
-tx_hash = await kernel.create_transaction(...)
-await client.advanced.wait_for_transaction(tx_hash)
-```
-
-### `client.advanced.escrow`
-
-Direct access to EscrowVault contract.
-
-```python
-escrow = client.advanced.escrow
-balance = await escrow.get_balance("0x...")
-```
-
-### `client.advanced.usdc`
-
-Direct access to USDC contract.
-
-```python
-usdc = client.advanced.usdc
-allowance = await usdc.allowance(owner, spender)
-await usdc.approve(spender, amount)
-```
-
----
-
-## Mock Utilities
-
-Only available in mock mode.
-
-```python
-# Mint test USDC
-await client.mock.mint("0x...", 10000)
-
-# Fast-forward time
-await client.mock.advance_time(3600)  # 1 hour
-
-# Reset all state
-await client.mock.reset()
-
-# Set exact balance
-await client.mock.set_balance("0x...", 500)
-```
-
----
-
-## Type Hints
-
-```python
-from agirails.types import (
-    TransactionState,
-    Mode,
-    PayOptions,
-    PayResult,
-    StatusResult,
-    Transaction,
+# Register as a provider
+cleanup = await provide(
+    service="image-generation",
+    endpoint="https://my-agent.com/generate",
+    price="10.00",
 )
 
-# TransactionState is a string literal type
-state: TransactionState  # "INITIATED" | "QUOTED" | "COMMITTED" | ...
+# Request a service
+result = await request(
+    service="image-generation",
+    input={"prompt": "A sunset over mountains"},
+    max_price="15.00",
+)
 
-# Mode is a string literal type
-mode: Mode  # "mock" | "testnet" | "mainnet"
+# Query service directory
+providers = await ServiceDirectory.find(
+    service="image-generation",
+    max_price="20.00",
+)
+```
+
+---
+
+## Level 1 API - Agent Abstraction
+
+Higher-level Agent class for autonomous operation.
+
+```python
+from agirails import Agent, calculate_price
+
+agent = Agent(
+    name="my-image-agent",
+    services=[{
+        "name": "generate",
+        "handler": generate_image,
+        "pricing": {
+            "base": "5.00",
+            "per_unit": "0.10",
+            "unit": "image",
+        },
+    }],
+)
+
+await agent.start()
+```
+
+---
+
+## Error Types
+
+### Error Hierarchy
+
+```
+ACTPError (base)
+├── Transaction Errors
+│   ├── TransactionError (base)
+│   ├── TransactionNotFoundError
+│   ├── InvalidStateTransitionError
+│   ├── EscrowError (base)
+│   ├── EscrowNotFoundError
+│   ├── DeadlinePassedError
+│   ├── DeadlineExpiredError
+│   ├── DisputeWindowActiveError
+│   ├── ContractPausedError
+│   └── InsufficientBalanceError
+├── Validation Errors
+│   ├── ValidationError
+│   ├── InvalidAddressError
+│   └── InvalidAmountError
+├── Network Errors
+│   ├── NetworkError
+│   ├── TransactionRevertedError
+│   └── SignatureVerificationError
+├── Storage Errors
+│   ├── StorageError
+│   ├── InvalidCIDError
+│   ├── UploadTimeoutError
+│   ├── DownloadTimeoutError
+│   ├── FileSizeLimitExceededError
+│   ├── StorageAuthenticationError
+│   ├── StorageRateLimitError
+│   └── ContentNotFoundError
+├── Agent/Job Errors
+│   ├── NoProviderFoundError
+│   ├── ACTPTimeoutError
+│   ├── ProviderRejectedError
+│   ├── DeliveryFailedError
+│   ├── DisputeRaisedError
+│   ├── ServiceConfigError
+│   ├── AgentLifecycleError
+│   └── QueryCapExceededError
+├── Mock Errors
+│   ├── MockStateCorruptedError
+│   ├── MockStateVersionError
+│   └── MockStateLockError
+└── (all have: code, message, details)
+```
+
+### Core Errors
+
+```python
+from agirails import (
+    # Base
+    ACTPError,                    # Base exception class
+
+    # Transaction
+    TransactionNotFoundError,     # Transaction ID not found
+    InvalidStateTransitionError,  # Invalid state change
+    EscrowNotFoundError,          # Escrow ID not found
+    DeadlinePassedError,          # Deadline has passed
+    DeadlineExpiredError,         # Alias for DeadlinePassedError
+    DisputeWindowActiveError,     # Cannot finalize during dispute window
+    ContractPausedError,          # Contract is paused
+    InsufficientBalanceError,     # Not enough USDC
+
+    # Validation
+    ValidationError,              # Input validation failed
+    InvalidAddressError,          # Bad Ethereum address
+    InvalidAmountError,           # Invalid amount format
+
+    # Network
+    NetworkError,                 # RPC/network issues
+    TransactionRevertedError,     # Blockchain tx reverted
+    SignatureVerificationError,   # Signature mismatch
+)
+```
+
+### Storage Errors (IPFS/Arweave)
+
+```python
+from agirails import (
+    StorageError,                 # Base storage error
+    InvalidCIDError,              # Invalid IPFS CID format
+    UploadTimeoutError,           # Upload timed out
+    DownloadTimeoutError,         # Download timed out
+    FileSizeLimitExceededError,   # File exceeds size limit
+    StorageAuthenticationError,   # Auth failed
+    StorageRateLimitError,        # Rate limit exceeded
+    ContentNotFoundError,         # CID not found
+)
+```
+
+### Agent/Job Errors (Level 0/1 API)
+
+```python
+from agirails import (
+    NoProviderFoundError,         # No provider for service
+    ACTPTimeoutError,             # Operation timeout (renamed to avoid conflict)
+    ProviderRejectedError,        # Provider refused job
+    DeliveryFailedError,          # Delivery failed
+    DisputeRaisedError,           # Dispute was raised
+    ServiceConfigError,           # Bad service config
+    AgentLifecycleError,          # Invalid lifecycle operation
+    QueryCapExceededError,        # Registry too large
+)
+```
+
+### Mock-Specific Errors
+
+```python
+from agirails import (
+    MockStateCorruptedError,      # Mock state file corrupted
+    MockStateVersionError,        # State version mismatch
+    MockStateLockError,           # State file locked
+)
+```
+
+### Error Handling Example
+
+```python
+from agirails import (
+    ACTPError,
+    InsufficientBalanceError,
+    InvalidStateTransitionError,
+    NetworkError,
+)
+
+try:
+    await client.basic.pay({"to": "0x...", "amount": 100})
+except InsufficientBalanceError as e:
+    print(f"Need more USDC: {e.details}")
+    # {'required': '100000000', 'available': '50000000'}
+except InvalidStateTransitionError as e:
+    print(f"Invalid transition: {e.details}")
+    # {'from': 'SETTLED', 'to': 'DELIVERED', 'valid_transitions': []}
+except NetworkError as e:
+    print(f"Network issue: {e}")
+    # Retry with exponential backoff
+except ACTPError as e:
+    print(f"ACTP Error [{e.code}]: {e}")
+```
+
+### Error Properties
+
+All exceptions extending `ACTPError` have:
+
+```python
+class ACTPError(Exception):
+    code: str       # Machine-readable code (e.g., 'INSUFFICIENT_BALANCE')
+    message: str    # Human-readable description
+    details: dict   # Additional context
+```
+
+### Debug Mode
+
+Enable detailed error output:
+
+```python
+from agirails import set_debug_mode, is_debug_mode
+
+set_debug_mode(True)  # Enable verbose error messages
+print(is_debug_mode())  # Check current mode
+```
+
+---
+
+## Types
+
+```python
+from agirails import TransactionState, ACTPClientMode
+
+# TransactionState values
+state: TransactionState  # Literal type
+# "INITIATED" | "QUOTED" | "COMMITTED" | "IN_PROGRESS"
+# | "DELIVERED" | "SETTLED" | "DISPUTED" | "CANCELLED"
+
+# ACTPClientMode values
+mode: ACTPClientMode  # Literal["mock", "testnet", "mainnet"]
 ```
 
 ## Dataclasses
@@ -330,14 +450,13 @@ mode: Mode  # "mock" | "testnet" | "mainnet"
 All result types are dataclasses with full type hints:
 
 ```python
-from agirails import PayResult
+from agirails import BasicPayResult, CheckStatusResult
 
-result: PayResult = await client.basic.pay({...})
+result: BasicPayResult = await client.basic.pay({...})
 
 # IDE autocomplete works
-result.tx_id    # str
-result.state    # str
-result.amount   # str
-result.fee      # str
-result.deadline # datetime
+result.tx_id      # str
+result.state      # str
+result.amount     # str
+result.deadline   # str (ISO 8601)
 ```

@@ -12,7 +12,6 @@ This example demonstrates:
 
 import asyncio
 from agirails import ACTPClient
-from agirails.errors import InsufficientBalanceError
 
 # Addresses (any valid Ethereum addresses for mock mode)
 REQUESTER_ADDRESS = "0x1111111111111111111111111111111111111111"
@@ -28,88 +27,73 @@ async def main():
         mode="mock",
         requester_address=REQUESTER_ADDRESS,
     )
-    print("   Client created in mock mode\n")
+    print("   Client created in mock mode")
+    print(f"   Address: {client.get_address()}\n")
 
-    # 2. Check initial balance
+    # 2. Check initial balance and mint if needed
     print("2. Checking balance...")
-    balance = await client.basic.get_balance()
-    print(f"   Balance: {balance} USDC")
+    balance = await client.get_balance(REQUESTER_ADDRESS)
+    print(f"   Balance: {balance} wei")
 
-    # 3. Mint test USDC if needed
-    if float(balance) < 100:
+    # 3. Mint test USDC if needed (mock mode only)
+    if int(balance) < 100_000_000:  # Less than 100 USDC
         print("   Balance low, minting 1000 USDC...")
-        await client.mock.mint(REQUESTER_ADDRESS, 1000)
-        balance = await client.basic.get_balance()
-        print(f"   New balance: {balance} USDC\n")
+        await client.mint_tokens(REQUESTER_ADDRESS, "1000000000")  # 1000 * 10^6
+        balance = await client.get_balance(REQUESTER_ADDRESS)
+        print(f"   New balance: {balance} wei\n")
     else:
         print()
 
-    # 4. Create a payment
+    # 4. Create a payment using Basic API
     print("3. Creating payment...")
-    try:
-        result = await client.basic.pay({
-            "to": PROVIDER_ADDRESS,
-            "amount": 25.00,
-            "deadline": "24h",
-            "service_description": "AI image generation service",
-        })
+    result = await client.basic.pay({
+        "to": PROVIDER_ADDRESS,
+        "amount": 25.00,
+        "deadline": "+24h",
+    })
 
-        print("   Payment created!")
-        print(f"   Transaction ID: {result.tx_id}")
-        print(f"   State: {result.state}")
-        print(f"   Amount: {result.amount} USDC")
-        print(f"   Fee: {result.fee} USDC")
-        print(f"   Deadline: {result.deadline.isoformat()}\n")
+    print("   Payment created!")
+    print(f"   Transaction ID: {result.tx_id}")
+    print(f"   State: {result.state}")
+    print(f"   Amount: {result.amount}")
+    print(f"   Deadline: {result.deadline}\n")
 
-        # 5. Check status
-        print("4. Checking status...")
-        status = await client.basic.check_status(result.tx_id)
-        print(f"   Current state: {status.state}")
-        print(f"   Can release: {status.can_release}")
-        print(f"   Can dispute: {status.can_dispute}")
-        print(f"   Can cancel: {status.can_cancel}\n")
+    # 5. Check status using Basic API
+    print("4. Checking status...")
+    status = await client.basic.check_status(result.tx_id)
+    print(f"   Current state: {status.state}")
+    print(f"   Can accept: {status.can_accept}")
+    print(f"   Can complete: {status.can_complete}")
+    print(f"   Can dispute: {status.can_dispute}\n")
 
-        # 6. Simulate provider delivering (in real app, provider does this)
-        print("5. Simulating delivery...")
-        await client.standard.transition_state(
-            result.tx_id,
-            "DELIVERED",
-            metadata={
-                "result_hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-                "result_url": "ipfs://QmExample...",
-            }
-        )
-        print("   Provider marked as DELIVERED\n")
+    # 6. Provider delivers (using Standard API for state transition)
+    print("5. Provider delivering...")
+    await client.standard.transition_state(result.tx_id, "DELIVERED")
+    print("   State transitioned to DELIVERED\n")
 
-        # 7. Check status again
-        print("6. Checking updated status...")
-        updated_status = await client.basic.check_status(result.tx_id)
-        print(f"   Current state: {updated_status.state}")
-        print(f"   Can release: {updated_status.can_release}")
-        print(f"   Time to auto-settle: {updated_status.time_to_auto_settle}\n")
+    # 7. Check updated status
+    print("6. Checking updated status...")
+    updated_status = await client.basic.check_status(result.tx_id)
+    print(f"   Current state: {updated_status.state}")
+    print(f"   Can dispute: {updated_status.can_dispute}\n")
 
-        # 8. Release payment
-        if updated_status.can_release:
-            print("7. Releasing payment...")
-            await client.basic.release(result.tx_id)
-            print("   Payment released to provider!\n")
+    # 8. Release payment (using Standard API)
+    # escrow_id equals tx_id in current implementation
+    print("7. Releasing payment...")
+    await client.standard.release_escrow(result.tx_id)
+    print("   Payment released to provider!\n")
 
-        # 9. Final status
-        print("8. Final status...")
-        final_status = await client.basic.check_status(result.tx_id)
-        print(f"   State: {final_status.state}")
-        print(f"   Is terminal: {final_status.is_terminal}\n")
+    # 9. Final status
+    print("8. Final status...")
+    final_status = await client.basic.check_status(result.tx_id)
+    print(f"   State: {final_status.state}")
+    print("   Transaction complete!\n")
 
-        # 10. Check final balance
-        print("9. Final balance...")
-        final_balance = await client.basic.get_balance()
-        print(f"   Balance: {final_balance} USDC")
-        print(f"   (Started with {balance}, paid 25 + fee)\n")
-
-    except InsufficientBalanceError as e:
-        print(f"   Error: Insufficient balance")
-        print(f"   Need: {e.required} USDC")
-        print(f"   Have: {e.available} USDC")
+    # 10. Check final balance
+    print("9. Final balance...")
+    final_balance = await client.get_balance(REQUESTER_ADDRESS)
+    print(f"   Balance: {final_balance} wei")
+    print("   (Paid 25 USDC + platform fee)\n")
 
     print("=== Example Complete ===")
 
