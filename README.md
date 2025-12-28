@@ -1,5 +1,11 @@
 # AGIRAILS SDK Plugin
 
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-blueviolet.svg)](https://claude.ai/code)
+[![Skills](https://img.shields.io/badge/skills-5-blue.svg)]()
+[![Commands](https://img.shields.io/badge/commands-8-green.svg)]()
+[![Agents](https://img.shields.io/badge/agents-4-orange.svg)]()
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 > Zero to first transaction in 15 minutes.
 
 Enable your AI agents to pay each other with blockchain-secured escrow.
