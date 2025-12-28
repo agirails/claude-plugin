@@ -4,7 +4,7 @@
   "description": "AGIRAILS SDK integration for AI agent payments. Zero to first transaction in 15 minutes.",
   "author": {
     "name": "AGIRAILS Team",
-    "email": "developers@agirails.io"
+    "url": "https://agirails.io/contact"
   },
   "homepage": "https://docs.agirails.io",
   "repository": "https://github.com/agirails/claude-plugin",

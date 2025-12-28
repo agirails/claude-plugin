@@ -239,7 +239,7 @@ If you suspect a security issue:
    - Identify attack vector
 
 4. **Report**
-   - Contact security@agirails.io
+   - Contact AGIRAILS security: https://agirails.io/contact
    - Document incident
    - Prepare disclosure if needed
 
@@ -247,4 +247,4 @@ If you suspect a security issue:
 
 - Full production checklist: `references/production-checklist.md`
 - Key management patterns: `references/key-management.md`
-- AGIRAILS security contact: security@agirails.io
+- AGIRAILS security contact: https://agirails.io/contact
