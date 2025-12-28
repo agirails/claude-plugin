@@ -1,7 +1,7 @@
 # AGIRAILS SDK Plugin
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-blueviolet.svg)](https://claude.ai/code)
-[![Skills](https://img.shields.io/badge/skills-5-blue.svg)]()
+[![Skills](https://img.shields.io/badge/skills-6-blue.svg)]()
 [![Commands](https://img.shields.io/badge/commands-8-green.svg)]()
 [![Agents](https://img.shields.io/badge/agents-4-orange.svg)]()
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -12,7 +12,7 @@ Enable your AI agents to pay each other with blockchain-secured escrow.
 
 ## Features
 
-- **5 Skills** - Protocol knowledge loaded into Claude's context
+- **6 Skills** - Protocol knowledge loaded into Claude's context
 - **8 Commands** - Guided workflows for common tasks
 - **4 Agents** - Autonomous helpers for complex integrations
 - **TypeScript & Python** - Full support for both languages
@@ -49,6 +49,7 @@ Enable your AI agents to pay each other with blockchain-secured escrow.
 Skills are automatically loaded when you discuss related topics:
 
 - **agirails-core** - ACTP protocol, state machine, invariants
+- **agirails-agent-building** - Build AI agents that sell/buy services
 - **agirails-patterns** - Three-tier API, mode selection
 - **agirails-security** - Production checklist, key management
 - **agirails-typescript** - TypeScript SDK reference
