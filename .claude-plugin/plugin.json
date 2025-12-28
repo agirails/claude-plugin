@@ -1,0 +1,26 @@
+{
+  "name": "agirails",
+  "version": "1.0.0",
+  "description": "AGIRAILS SDK integration for AI agent payments. Zero to first transaction in 15 minutes.",
+  "author": {
+    "name": "AGIRAILS Team",
+    "email": "developers@agirails.io"
+  },
+  "homepage": "https://docs.agirails.io",
+  "repository": "https://github.com/agirails/claude-plugin",
+  "license": "Apache-2.0",
+  "keywords": [
+    "ai-agents",
+    "payments",
+    "escrow",
+    "USDC",
+    "Web3",
+    "blockchain",
+    "ACTP"
+  ],
+  "categories": [
+    "Web3/Blockchain",
+    "AI/Agents",
+    "Payments"
+  ]
+}

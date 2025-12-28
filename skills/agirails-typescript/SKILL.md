@@ -1,0 +1,229 @@
+---
+description: This skill provides TypeScript SDK reference for AGIRAILS when the user is working with TypeScript, Node.js, package.json, npm, @agirails/sdk, or asks about TypeScript-specific implementation details. Use this skill when writing TypeScript code that integrates with ACTP.
+---
+
+# AGIRAILS TypeScript SDK
+
+Complete TypeScript SDK reference for integrating ACTP into Node.js and TypeScript projects.
+
+## Installation
+
+```bash
+npm install @agirails/sdk
+# or
+yarn add @agirails/sdk
+# or
+pnpm add @agirails/sdk
+```
+
+**Requirements:**
+- Node.js >= 18.0.0
+- TypeScript >= 5.0 (if using TypeScript)
+- ethers.js v6 (included as dependency)
+
+## Quick Start
+
+```typescript
+import { ACTPClient } from '@agirails/sdk';
+
+// Create client in mock mode
+const client = await ACTPClient.create({
+  mode: 'mock',
+  requesterAddress: '0x1234567890123456789012345678901234567890',
+});
+
+// Create a payment
+const result = await client.basic.pay({
+  to: '0xProviderAddress',
+  amount: '100.00',
+  deadline: '+24h',
+});
+
+console.log('Transaction ID:', result.txId);
+console.log('State:', result.state);
+```
+
+## Client Initialization
+
+### Mock Mode (Development)
+
+```typescript
+const client = await ACTPClient.create({
+  mode: 'mock',
+  requesterAddress: '0x...', // Your address
+  stateDirectory: '.actp',   // Optional, for persistence
+});
+```
+
+### Testnet Mode
+
+```typescript
+const client = await ACTPClient.create({
+  mode: 'testnet',
+  privateKey: process.env.PRIVATE_KEY,
+  rpcUrl: 'https://sepolia.base.org', // Optional, has default
+});
+```
+
+### Mainnet Mode
+
+```typescript
+const client = await ACTPClient.create({
+  mode: 'mainnet',
+  privateKey: process.env.PRIVATE_KEY,
+  rpcUrl: process.env.BASE_RPC_URL,
+});
+```
+
+## Basic API Examples
+
+### Pay for a Service
+
+```typescript
+const result = await client.basic.pay({
+  to: '0xProviderAddress',
+  amount: '100.00',            // String, in USDC
+  deadline: '+24h',            // Relative or absolute
+  serviceDescription: 'AI image generation',
+});
+
+// result: { txId, state, amount, fee, deadline }
+```
+
+### Check Status
+
+```typescript
+const status = await client.basic.checkStatus(txId);
+
+if (status.canRelease) {
+  await client.basic.release(txId);
+} else if (status.canDispute) {
+  await client.basic.dispute(txId, { reason: 'Not delivered' });
+}
+```
+
+### Get Balance
+
+```typescript
+const balance = await client.basic.getBalance();
+console.log(`Balance: ${balance} USDC`);
+```
+
+## Error Handling
+
+```typescript
+import {
+  InsufficientBalanceError,
+  InvalidAddressError,
+  InvalidStateTransitionError,
+  TransactionNotFoundError,
+  DeadlineExpiredError,
+  NotAuthorizedError,
+} from '@agirails/sdk';
+
+try {
+  await client.basic.pay({...});
+} catch (error) {
+  if (error instanceof InsufficientBalanceError) {
+    console.log('Need more USDC:', error.required, 'have:', error.available);
+  } else if (error instanceof InvalidAddressError) {
+    console.log('Bad address:', error.address);
+  } else if (error instanceof InvalidStateTransitionError) {
+    console.log('Cannot transition from', error.currentState, 'to', error.targetState);
+  } else {
+    throw error;
+  }
+}
+```
+
+## TypeScript Types
+
+```typescript
+import type {
+  PayOptions,
+  PayResult,
+  StatusResult,
+  Transaction,
+  TransactionState,
+  CreateOptions,
+} from '@agirails/sdk';
+
+// Full type safety
+const options: PayOptions = {
+  to: '0x...',
+  amount: '100.00',
+  deadline: '+24h',
+};
+
+const result: PayResult = await client.basic.pay(options);
+```
+
+## CLI Commands
+
+The SDK includes CLI tools:
+
+```bash
+# Check balance
+npx actp balance
+
+# Mint test USDC (mock mode only)
+npx actp mint 0xAddress 1000
+
+# List transactions
+npx actp tx list
+
+# Get transaction status
+npx actp tx status 0xTxId
+
+# Watch transaction
+npx actp tx watch 0xTxId
+```
+
+## Common Mistakes
+
+### 1. Missing `await`
+
+```typescript
+// WRONG - Returns Promise, not result
+const result = client.basic.pay({...});
+console.log(result); // Promise { <pending> }
+
+// CORRECT
+const result = await client.basic.pay({...});
+console.log(result); // { txId: '0x...', ... }
+```
+
+### 2. Wrong Amount Type
+
+```typescript
+// WRONG - Numbers can have precision issues
+const result = await client.basic.pay({
+  amount: 100.00, // Number
+});
+
+// CORRECT - Use strings
+const result = await client.basic.pay({
+  amount: '100.00', // String
+});
+```
+
+### 3. Not Handling Async Errors
+
+```typescript
+// WRONG - Unhandled rejection
+client.basic.pay({...});
+
+// CORRECT - Handle errors
+try {
+  await client.basic.pay({...});
+} catch (error) {
+  handleError(error);
+}
+
+// OR with .catch()
+client.basic.pay({...}).catch(handleError);
+```
+
+For detailed API reference, see `references/api-reference.md`.
+For error handling patterns, see `references/error-handling.md`.
+For migration from v1, see `references/migration-v1-v2.md`.

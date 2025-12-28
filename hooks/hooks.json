@@ -1,0 +1,39 @@
+[
+  {
+    "name": "agirails-project-detection",
+    "description": "Detects when user is working in a project with AGIRAILS SDK installed",
+    "event": "SessionStart",
+    "type": "prompt",
+    "prompt": "Check if this is an AGIRAILS project by looking for:\n- TypeScript: @agirails/sdk in package.json or node_modules/@agirails\n- Python: agirails in requirements.txt, pyproject.toml, or installed packages\n\nIf AGIRAILS SDK is detected, briefly mention that AGIRAILS commands are available:\n- /agirails:status - Check transaction status\n- /agirails:pay - Create payments\n- /agirails:debug - Troubleshoot issues\n\nKeep it concise (1-2 sentences max). Don't be intrusive."
+  },
+  {
+    "name": "agirails-security-review",
+    "description": "Proactively reviews code containing private keys or payment logic",
+    "event": "PostToolUse",
+    "type": "prompt",
+    "hooks": [
+      {
+        "tool": "Write",
+        "condition": "content contains 'privateKey' OR content contains 'PRIVATE_KEY' OR content contains 'ACTPClient'"
+      }
+    ],
+    "prompt": "The user just wrote code that may contain payment-related logic or private key handling.\n\nQuickly scan for CRITICAL issues:\n1. Hardcoded private keys (pattern: 0x followed by 64 hex chars)\n2. Keys not loaded from environment variables\n3. Missing input validation on payment amounts\n\nIf you find a CRITICAL issue, immediately warn the user.\nIf the code looks safe, say nothing.\n\nBe concise - only speak up for real security concerns."
+  },
+  {
+    "name": "agirails-testnet-reminder",
+    "description": "Reminds users about testnet when they switch to mainnet mode",
+    "event": "PostToolUse",
+    "type": "prompt",
+    "hooks": [
+      {
+        "tool": "Write",
+        "condition": "content contains \"mode: 'mainnet'\" OR content contains 'mode=\"mainnet\"'"
+      },
+      {
+        "tool": "Edit",
+        "condition": "new_string contains \"mode: 'mainnet'\" OR new_string contains 'mode=\"mainnet\"'"
+      }
+    ],
+    "prompt": "The user just wrote code that sets AGIRAILS SDK to mainnet mode.\n\nRemind them briefly:\n- Mainnet uses real USDC on Base blockchain\n- Test thoroughly on testnet first\n- Ensure private key is securely stored (not hardcoded)\n\nKeep it to 1-2 sentences. Don't lecture."
+  }
+]
