@@ -166,10 +166,10 @@ describe('Happy Path', () => {
     });
     expect(tx.state).toBe('INITIATED');
 
-    // 2. Provider quotes (QUOTED)
-    await client.standard.transitionState(tx.txId, 'QUOTED', {
-      quotedAmount: 90.00,
-    });
+    // 2. Provider quotes (QUOTED) with ABI-encoded amount
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const quoteProof = abiCoder.encode(['uint256'], [90000000n]); // 90 USDC (6 decimals)
+    await client.standard.transitionState(tx.txId, 'QUOTED', quoteProof);
 
     // 3. Requester accepts (COMMITTED)
     await client.standard.linkEscrow(tx.txId, { amount: 90.00 });

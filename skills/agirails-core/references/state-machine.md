@@ -104,7 +104,7 @@ Provider is actively working on the service. Required state before transitioning
 Provider has completed work and submitted delivery proof.
 
 **Entry:** `transitionState(DELIVERED)` from IN_PROGRESS (required)
-**Exit:** `releaseEscrow()` → SETTLED, or `raiseDispute()` → DISPUTED
+**Exit:** `releaseEscrow()` → SETTLED, or `transitionState(txId, 'DISPUTED')` → DISPUTED
 
 **Properties:**
 - Work is complete
@@ -127,7 +127,7 @@ Payment has been released. Terminal state.
 ### DISPUTED (6)
 Transaction is under dispute, awaiting resolution.
 
-**Entry:** `raiseDispute()` from DELIVERED
+**Entry:** `transitionState(txId, 'DISPUTED')` from DELIVERED
 **Exit:** `resolveDispute()` → SETTLED
 
 **Properties:**
@@ -162,7 +162,7 @@ Transaction was cancelled before completion. Terminal state.
 | IN_PROGRESS | CANCELLED | Provider | `transitionState()` | Provider abandons work |
 | DELIVERED | SETTLED | Requester | `releaseEscrow()` | - |
 | DELIVERED | SETTLED | Auto | After dispute window | Window expired |
-| DELIVERED | DISPUTED | Either | `raiseDispute()` | Within dispute window |
+| DELIVERED | DISPUTED | Either | `transitionState()` | Within dispute window |
 | DISPUTED | SETTLED | Mediator | `resolveDispute()` | Resolution provided |
 | DISPUTED | CANCELLED | Admin/Pauser | `transitionState()` | Emergency only |
 
@@ -244,7 +244,7 @@ releaseEscrow() → SETTLED
 ### Dispute Flow
 ```
 ... → DELIVERED
-raiseDispute() → DISPUTED
+transitionState(txId, 'DISPUTED') → DISPUTED
 [mediator reviews]
 resolveDispute({
   requesterAmount: 70%,

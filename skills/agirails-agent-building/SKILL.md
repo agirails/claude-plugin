@@ -125,10 +125,10 @@ class ServiceAgent {
     // YOUR LOGIC: Decide if you want this job and at what price
     const quote = this.calculatePrice(tx.metadata);
 
-    // SDK HANDLES: State transition to QUOTED
-    await this.client.standard.transitionState(tx.id, 'QUOTED', {
-      quotedAmount: quote,
-    });
+    // SDK HANDLES: State transition to QUOTED with ABI-encoded amount
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const quoteProof = abiCoder.encode(['uint256'], [quote]);
+    await this.client.standard.transitionState(tx.id, 'QUOTED', quoteProof);
   }
 
   // 3. Do the work when committed (YOU IMPLEMENT: service logic)

@@ -100,10 +100,12 @@ async function main() {
   console.log(`  Fee: ${result.fee} USDC\n`);
 
   // 4. Simulate provider delivering (in production, provider calls this)
-  await client.standard.transitionState(result.txId, 'DELIVERED', {
-    resultHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-    resultUrl: 'ipfs://QmExampleHash',
-  });
+  // IN_PROGRESS is REQUIRED before DELIVERED
+  await client.standard.transitionState(result.txId, 'IN_PROGRESS');
+  // DELIVERED requires ABI-encoded dispute window proof
+  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+  const proof = abiCoder.encode(['uint256'], [172800]); // 2 days
+  await client.standard.transitionState(result.txId, 'DELIVERED', proof);
   console.log('✓ Provider delivered\n');
 
   // 5. Release payment
@@ -247,10 +249,9 @@ async function main() {
 
   // STATE 2: QUOTED (optional - provider can quote different price)
   console.log('2. Provider submitting quote (QUOTED)...');
-  await providerClient.standard.transitionState(tx.txId, 'QUOTED', {
-    quotedAmount: 45.00, // Provider offers discount
-    estimatedDelivery: '2 days',
-  });
+  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+  const quoteProof = abiCoder.encode(['uint256'], [45000000n]); // $45 in USDC (6 decimals)
+  await providerClient.standard.transitionState(tx.txId, 'QUOTED', quoteProof);
   console.log(`   State: QUOTED`);
   console.log(`   Quoted amount: $45.00\n`);
 
@@ -262,11 +263,9 @@ async function main() {
   console.log(`   State: COMMITTED`);
   console.log(`   Escrow linked, funds locked\n`);
 
-  // STATE 4: IN_PROGRESS (provider signals work started)
+  // STATE 4: IN_PROGRESS (provider signals work started - REQUIRED before DELIVERED)
   console.log('4. Provider starting work (IN_PROGRESS)...');
-  await providerClient.standard.transitionState(tx.txId, 'IN_PROGRESS', {
-    progressNote: 'Training started, 0% complete',
-  });
+  await providerClient.standard.transitionState(tx.txId, 'IN_PROGRESS');
   console.log(`   State: IN_PROGRESS\n`);
 
   // Simulate progress updates
@@ -278,17 +277,14 @@ async function main() {
 
   // STATE 5: DELIVERED (provider completes work)
   console.log('5. Provider delivering result (DELIVERED)...');
-  await providerClient.standard.transitionState(tx.txId, 'DELIVERED', {
-    resultHash: '0xabc123...', // Hash of delivered model
-    resultUrl: 'ipfs://QmModelHash',
-    notes: 'Model trained with 98.5% accuracy',
-  });
+  const deliveryProof = abiCoder.encode(['uint256'], [86400]); // 24h dispute window
+  await providerClient.standard.transitionState(tx.txId, 'DELIVERED', deliveryProof);
   console.log(`   State: DELIVERED`);
   console.log(`   Dispute window: 24 hours\n`);
 
   // STATE 6: SETTLED (requester releases payment)
   console.log('6. Requester releasing payment (SETTLED)...');
-  await requesterClient.basic.release(tx.txId);
+  await requesterClient.standard.releaseEscrow(tx.txId);
   console.log(`   State: SETTLED`);
   console.log(`   Payment complete!\n`);
 
@@ -334,10 +330,11 @@ async function main() {
     deadline: '+24h',
   });
 
-  // Provider delivers
-  await client.standard.transitionState(tx.txId, 'DELIVERED', {
-    resultHash: '0xbadresult...',
-  });
+  // Provider delivers (IN_PROGRESS then DELIVERED)
+  await client.standard.transitionState(tx.txId, 'IN_PROGRESS');
+  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+  const proof = abiCoder.encode(['uint256'], [172800]); // 2 days
+  await client.standard.transitionState(tx.txId, 'DELIVERED', proof);
 
   console.log('Transaction delivered, now raising dispute...\n');
 

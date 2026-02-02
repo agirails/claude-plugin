@@ -146,14 +146,13 @@ await client.standard.linkEscrow('0x...');
 Transition transaction to new state.
 
 ```typescript
-// Provider marks as delivered
-await client.standard.transitionState('0x...', 'DELIVERED', {
-  resultHash: '0x...',   // SHA256 of result
-  resultUrl: 'ipfs://...', // Optional
-});
-
-// Provider marks as in-progress
+// Provider marks as in-progress (REQUIRED before DELIVERED)
 await client.standard.transitionState('0x...', 'IN_PROGRESS');
+
+// Provider marks as delivered with ABI-encoded dispute window proof
+const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+const proof = abiCoder.encode(['uint256'], [172800]); // 2 days in seconds
+await client.standard.transitionState('0x...', 'DELIVERED', proof);
 ```
 
 ### `client.standard.getTransaction(txId)`

@@ -123,7 +123,7 @@ COMMITTED → CANCELLED (before deadline)
 | COMMITTED | CANCELLED | Either | `cancel()` |
 | IN_PROGRESS | DELIVERED | Provider | `transitionState()` |
 | DELIVERED | SETTLED | Requester/Auto | `releaseEscrow()` |
-| DELIVERED | DISPUTED | Either | `raiseDispute()` |
+| DELIVERED | DISPUTED | Either | `transitionState()` |
 | DISPUTED | SETTLED | Mediator | `resolveDispute()` |
 | DISPUTED | CANCELLED | Admin/Pauser | `transitionState()` |
 
@@ -152,7 +152,7 @@ Output:
 │                                                                 │
 │  Available Actions:                                             │
 │  - Requester: releaseEscrow() → SETTLED                         │
-│  - Either: raiseDispute() → DISPUTED                            │
+│  - Either: transitionState(txId, 'DISPUTED') → DISPUTED         │
 │  - Auto: After dispute window expires → SETTLED                 │
 │                                                                 │
 │  Timing:                                                        │

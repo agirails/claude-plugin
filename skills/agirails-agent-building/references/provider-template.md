@@ -107,10 +107,10 @@ export class ProviderAgent {
       return;
     }
 
-    // SDK HANDLES: Transition to QUOTED state
-    await this.client.standard.transitionState(tx.id, 'QUOTED', {
-      quotedAmount: quote,
-    });
+    // SDK HANDLES: Transition to QUOTED state with ABI-encoded amount
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const quoteProof = abiCoder.encode(['uint256'], [quote]);
+    await this.client.standard.transitionState(tx.id, 'QUOTED', quoteProof);
 
     console.log(`Quoted ${ethers.formatUnits(quote, 6)} USDC for ${tx.id}`);
   }

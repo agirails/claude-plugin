@@ -105,11 +105,13 @@ await client.standard.linkEscrow(tx.txId);
 // Get full transaction details
 const details = await client.standard.getTransaction(txId);
 
-// Transition state (provider)
-await client.standard.transitionState(txId, 'DELIVERED', {
-  resultHash: proofHash,
-  resultUrl: 'ipfs://...',
-});
+// Transition state (provider) - IN_PROGRESS required before DELIVERED
+await client.standard.transitionState(txId, 'IN_PROGRESS');
+
+// DELIVERED requires ABI-encoded dispute window proof
+const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+const proof = abiCoder.encode(['uint256'], [172800]); // 2 days
+await client.standard.transitionState(txId, 'DELIVERED', proof);
 
 // Listen to events
 client.standard.on('StateChanged', (event) => {
@@ -253,9 +255,12 @@ client.standard.on('TransactionCreated', async (event) => {
   if (event.provider === myAddress) {
     // New job for me!
     await processJob(event.txId);
-    await client.standard.transitionState(event.txId, 'DELIVERED', {
-      resultHash: hashOfResult,
-    });
+    // IN_PROGRESS required before DELIVERED
+    await client.standard.transitionState(event.txId, 'IN_PROGRESS');
+    // DELIVERED with ABI-encoded dispute window proof
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const proof = abiCoder.encode(['uint256'], [172800]);
+    await client.standard.transitionState(event.txId, 'DELIVERED', proof);
   }
 });
 ```

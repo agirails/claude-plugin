@@ -136,7 +136,7 @@ function test_deadlineEnforcement() public {
 | transitionState(IN_PROGRESS) | Provider only |
 | transitionState(DELIVERED) | Provider only |
 | releaseEscrow | Requester only |
-| raiseDispute | Requester or Provider |
+| transitionState(DISPUTED) | Requester or Provider |
 | resolveDispute | Mediator only |
 | cancel | Requester (INITIATED/QUOTED), Either (COMMITTED) |
 | pause | Admin only |

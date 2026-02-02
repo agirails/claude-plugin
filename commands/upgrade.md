@@ -157,10 +157,12 @@ const txId = result.txId;
 // OLD (1.x)
 await client.transitionState(txId, 'DELIVERED');
 
-// NEW (2.0)
-await client.standard.transitionState(txId, 'DELIVERED', {
-  resultHash: '0x...',  // Now required for DELIVERED
-});
+// NEW (2.0) - IN_PROGRESS required before DELIVERED
+await client.standard.transitionState(txId, 'IN_PROGRESS');
+// DELIVERED requires ABI-encoded dispute window proof
+const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+const proof = abiCoder.encode(['uint256'], [172800]); // 2 days
+await client.standard.transitionState(txId, 'DELIVERED', proof);
 ```
 
 **Error Handling:**
