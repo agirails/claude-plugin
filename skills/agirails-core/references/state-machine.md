@@ -27,7 +27,7 @@
                          ▼                                    │
                   ┌──────────────┐                            │
                   │ IN_PROGRESS  │ ← Provider working         │
-                  │     (3)      │   (optional state)         │
+                  │     (3)      │   (required before DELIVERED)
                   └──────┬───────┘                            │
                          │                                    │
                          ▼                                    ▼
@@ -80,7 +80,7 @@ Provider has submitted a price quote. Optional state for negotiation.
 Escrow is linked and funds are locked. Work can begin.
 
 **Entry:** `linkEscrow()` from INITIATED or QUOTED
-**Exit:** `transitionState(DELIVERED)` → DELIVERED, or `transitionState(IN_PROGRESS)` → IN_PROGRESS, or `cancel()` → CANCELLED
+**Exit:** `transitionState(IN_PROGRESS)` → IN_PROGRESS, or `cancel()` → CANCELLED
 
 **Properties:**
 - USDC locked in escrow vault
@@ -89,7 +89,7 @@ Escrow is linked and funds are locked. Work can begin.
 - Cancel still possible (with conditions)
 
 ### IN_PROGRESS (3)
-Provider is actively working on the service. Optional state for progress tracking.
+Provider is actively working on the service. Required state before transitioning to DELIVERED.
 
 **Entry:** `transitionState(IN_PROGRESS)` from COMMITTED
 **Exit:** `transitionState(DELIVERED)` → DELIVERED
@@ -103,7 +103,7 @@ Provider is actively working on the service. Optional state for progress trackin
 ### DELIVERED (4)
 Provider has completed work and submitted delivery proof.
 
-**Entry:** `transitionState(DELIVERED)` from COMMITTED or IN_PROGRESS
+**Entry:** `transitionState(DELIVERED)` from IN_PROGRESS (required)
 **Exit:** `releaseEscrow()` → SETTLED, or `raiseDispute()` → DISPUTED
 
 **Properties:**
@@ -157,7 +157,6 @@ Transaction was cancelled before completion. Terminal state.
 | QUOTED | COMMITTED | Requester | `linkEscrow()` | Has USDC approval |
 | QUOTED | CANCELLED | Requester | `cancel()` | Before deadline |
 | COMMITTED | IN_PROGRESS | Provider | `transitionState()` | - |
-| COMMITTED | DELIVERED | Provider | `transitionState()` | - |
 | COMMITTED | CANCELLED | Either | `cancel()` | Before deadline, conditions apply |
 | IN_PROGRESS | DELIVERED | Provider | `transitionState()` | - |
 | DELIVERED | SETTLED | Requester | `releaseEscrow()` | - |
@@ -224,17 +223,19 @@ print(f"Can cancel: {status.can_cancel}")
 ```
 createTransaction() → INITIATED
 linkEscrow() → COMMITTED
+transitionState(IN_PROGRESS) → IN_PROGRESS
 [provider works]
 transitionState(DELIVERED) → DELIVERED
 [requester satisfied]
 releaseEscrow() → SETTLED
 ```
 
-### Skip Optional States
+### Skip QUOTED State
 ```
 createTransaction() → INITIATED
 linkEscrow() → COMMITTED (skip QUOTED)
-transitionState(DELIVERED) → DELIVERED (skip IN_PROGRESS)
+transitionState(IN_PROGRESS) → IN_PROGRESS
+transitionState(DELIVERED) → DELIVERED
 releaseEscrow() → SETTLED
 ```
 

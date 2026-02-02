@@ -219,7 +219,7 @@ interface TransactionFilter {
 
 const transactions = await client.standard.getTransactions({
   participant: myAddress,
-  states: ['COMMITTED', 'DELIVERED'],
+  states: ['COMMITTED', 'IN_PROGRESS', 'DELIVERED'],
   limit: 100,
 });
 ```

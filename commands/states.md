@@ -48,7 +48,7 @@ ACTP Transaction State Machine (8 States)
                          ▼                                    │
                   ┌──────────────┐                            │
                   │ IN_PROGRESS  │ ← Provider working         │
-                  │     (3)      │   (optional state)         │
+                  │     (3)      │   (required before DELIVERED)
                   └──────┬───────┘                            │
                          │                                    │
                          ▼                                    ▼
@@ -91,22 +91,17 @@ ACTP Transaction State Machine (8 States)
 
 **Happy Path (most common):**
 ```
-INITIATED → COMMITTED → DELIVERED → SETTLED
+INITIATED → COMMITTED → IN_PROGRESS → DELIVERED → SETTLED
 ```
 
 **With Provider Quote:**
 ```
-INITIATED → QUOTED → COMMITTED → DELIVERED → SETTLED
-```
-
-**With Progress Tracking:**
-```
-INITIATED → COMMITTED → IN_PROGRESS → DELIVERED → SETTLED
+INITIATED → QUOTED → COMMITTED → IN_PROGRESS → DELIVERED → SETTLED
 ```
 
 **Dispute Resolution:**
 ```
-INITIATED → COMMITTED → DELIVERED → DISPUTED → SETTLED
+INITIATED → COMMITTED → IN_PROGRESS → DELIVERED → DISPUTED → SETTLED
 ```
 
 **Cancellation:**
@@ -125,7 +120,6 @@ COMMITTED → CANCELLED (before deadline)
 | QUOTED | COMMITTED | Requester | `linkEscrow()` |
 | QUOTED | CANCELLED | Requester | `cancel()` |
 | COMMITTED | IN_PROGRESS | Provider | `transitionState()` |
-| COMMITTED | DELIVERED | Provider | `transitionState()` |
 | COMMITTED | CANCELLED | Either | `cancel()` |
 | IN_PROGRESS | DELIVERED | Provider | `transitionState()` |
 | DELIVERED | SETTLED | Requester/Auto | `releaseEscrow()` |
@@ -151,7 +145,7 @@ Output:
 │  Requester can now release payment or raise a dispute.          │
 │                                                                 │
 │  Entry Conditions:                                              │
-│  - Previous state: COMMITTED or IN_PROGRESS                     │
+│  - Previous state: IN_PROGRESS (required)                       │
 │  - Caller: Provider only                                        │
 │  - Optional: Delivery proof (hash + URL)                        │
 │                                                                 │

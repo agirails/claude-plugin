@@ -75,8 +75,8 @@ print(f"Can cancel: {status.can_cancel}")
 │  State:     DELIVERED (awaiting release)                    │
 │                                                             │
 │  Progress:                                                  │
-│  INITIATED → COMMITTED → DELIVERED → [ ] SETTLED            │
-│      [x]        [x]         [*]                             │
+│  INITIATED → COMMITTED → IN_PROGRESS → DELIVERED → [ ] SETTLED │
+│      [x]        [x]          [x]          [*]                   │
 │                                                             │
 │  Details:                                                   │
 │  Requester:    0xReq...123                                  │

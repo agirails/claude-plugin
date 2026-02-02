@@ -53,9 +53,9 @@ Options:
 │  └── Deadline:  2025-12-28 15:30 UTC (23h 45m remaining)        │
 │                                                                 │
 │  Progress:                                                      │
-│  [✓] INITIATED → [✓] COMMITTED → [ ] DELIVERED → [ ] SETTLED   │
+│  [✓] INITIATED → [✓] COMMITTED → [ ] IN_PROGRESS → [ ] DELIVERED → [ ] SETTLED │
 │                                                                 │
-│  Waiting for: Provider to deliver                               │
+│  Waiting for: Provider to start work                               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -194,7 +194,6 @@ Show what to expect for each state:
 |---------------|------------|---------|--------------|
 | INITIATED | COMMITTED | Requester links escrow | Immediate |
 | COMMITTED | IN_PROGRESS | Provider starts work | Minutes to hours |
-| COMMITTED | DELIVERED | Provider completes | Varies by service |
 | IN_PROGRESS | DELIVERED | Provider completes | Varies by service |
 | DELIVERED | SETTLED | Requester releases or auto | Up to dispute window |
 | DELIVERED | DISPUTED | Either party disputes | During dispute window |

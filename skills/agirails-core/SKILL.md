@@ -32,16 +32,16 @@ INITIATED → QUOTED → COMMITTED → IN_PROGRESS → DELIVERED → SETTLED
 | INITIATED | 0 | Transaction created, no escrow linked |
 | QUOTED | 1 | Provider submitted price quote (optional) |
 | COMMITTED | 2 | Escrow linked, funds locked |
-| IN_PROGRESS | 3 | Provider actively working (optional) |
+| IN_PROGRESS | 3 | Provider actively working (required before DELIVERED) |
 | DELIVERED | 4 | Work complete, proof submitted |
 | SETTLED | 5 | Payment released (terminal) |
 | DISPUTED | 6 | Under dispute, awaiting resolution |
 | CANCELLED | 7 | Cancelled before completion (terminal) |
 
 **Common Paths:**
-- Happy path: `INITIATED → COMMITTED → DELIVERED → SETTLED`
-- With quote: `INITIATED → QUOTED → COMMITTED → DELIVERED → SETTLED`
-- Dispute: `INITIATED → COMMITTED → DELIVERED → DISPUTED → SETTLED`
+- Happy path: `INITIATED → COMMITTED → IN_PROGRESS → DELIVERED → SETTLED`
+- With quote: `INITIATED → QUOTED → COMMITTED → IN_PROGRESS → DELIVERED → SETTLED`
+- Dispute: `INITIATED → COMMITTED → IN_PROGRESS → DELIVERED → DISPUTED → SETTLED`
 - Cancel: `INITIATED → CANCELLED` or `COMMITTED → CANCELLED`
 
 For complete state transition rules, see `references/state-machine.md`.

@@ -119,7 +119,7 @@ Common Testnet Problems:
 Transaction State Flow:
 INITIATED → Can: linkEscrow(), cancel()
 QUOTED → Can: linkEscrow(), cancel()
-COMMITTED → Can: transitionState(IN_PROGRESS/DELIVERED), cancel()
+COMMITTED → Can: transitionState(IN_PROGRESS), cancel()
 IN_PROGRESS → Can: transitionState(DELIVERED)
 DELIVERED → Can: release(), dispute()
 DISPUTED → Waiting for: resolution

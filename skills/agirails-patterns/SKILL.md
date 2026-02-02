@@ -267,7 +267,7 @@ client.standard.on('TransactionCreated', async (event) => {
 async function getDashboardData(address: string) {
   const transactions = await client.standard.getTransactions({
     participant: address,
-    states: ['COMMITTED', 'DELIVERED', 'DISPUTED'],
+    states: ['COMMITTED', 'IN_PROGRESS', 'DELIVERED', 'DISPUTED'],
   });
 
   return transactions.map(tx => ({

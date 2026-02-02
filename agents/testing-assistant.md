@@ -136,7 +136,8 @@ describe('Happy Path', () => {
     expect(result.state).toBe('COMMITTED');
     expect(result.fee).toBe(1.00); // 1% of $100
 
-    // 2. Provider delivers
+    // 2. Provider starts work and delivers
+    await client.standard.transitionState(result.txId, 'IN_PROGRESS');
     await client.standard.transitionState(result.txId, 'DELIVERED', {
       resultHash: '0x' + 'a'.repeat(64),
     });
@@ -247,7 +248,6 @@ describe('State Machine', () => {
     ['QUOTED', 'COMMITTED'],
     ['QUOTED', 'CANCELLED'],
     ['COMMITTED', 'IN_PROGRESS'],
-    ['COMMITTED', 'DELIVERED'],
     ['COMMITTED', 'CANCELLED'],
     ['IN_PROGRESS', 'DELIVERED'],
     ['DELIVERED', 'SETTLED'],
@@ -257,6 +257,7 @@ describe('State Machine', () => {
 
   const invalidTransitions = [
     ['COMMITTED', 'INITIATED'],   // Backwards
+    ['COMMITTED', 'DELIVERED'],   // Must go through IN_PROGRESS
     ['SETTLED', 'DELIVERED'],     // Backwards from terminal
     ['CANCELLED', 'COMMITTED'],   // From terminal
     ['DELIVERED', 'COMMITTED'],   // Backwards
@@ -305,9 +306,9 @@ async function setupTransactionInState(client: ACTPClient, targetState: string) 
     'QUOTED': ['QUOTED'],
     'COMMITTED': ['COMMITTED'],
     'IN_PROGRESS': ['COMMITTED', 'IN_PROGRESS'],
-    'DELIVERED': ['COMMITTED', 'DELIVERED'],
-    'SETTLED': ['COMMITTED', 'DELIVERED', 'SETTLED'],
-    'DISPUTED': ['COMMITTED', 'DELIVERED', 'DISPUTED'],
+    'DELIVERED': ['COMMITTED', 'IN_PROGRESS', 'DELIVERED'],
+    'SETTLED': ['COMMITTED', 'IN_PROGRESS', 'DELIVERED', 'SETTLED'],
+    'DISPUTED': ['COMMITTED', 'IN_PROGRESS', 'DELIVERED', 'DISPUTED'],
     'CANCELLED': ['CANCELLED'],
   };
 
@@ -407,6 +408,7 @@ describe('Dispute Flow', () => {
       amount: 100.00,
       deadline: '+24h',
     });
+    await client.standard.transitionState(tx.txId, 'IN_PROGRESS');
     await client.standard.transitionState(tx.txId, 'DELIVERED');
 
     // Raise dispute
@@ -435,6 +437,7 @@ describe('Dispute Flow', () => {
       amount: 50.00,
       deadline: '+24h',
     });
+    await client.standard.transitionState(tx.txId, 'IN_PROGRESS');
     await client.standard.transitionState(tx.txId, 'DELIVERED');
     await client.basic.release(tx.txId);
 
