@@ -209,6 +209,42 @@ actp tx list
 actp tx status 0xTxId
 ```
 
+## Decentralized Identifiers (DIDs)
+
+Every Ethereum address automatically IS a DID - no registration required:
+
+```
+did:ethr:84532:0x742d35cc6634c0532925a3b844bc9e7595f0beb
+       ↑      ↑
+   chainId  address
+```
+
+### Basic DID Operations
+
+```python
+from agirails import DIDResolver
+
+# Build DID from address
+did = DIDResolver.build_did("0x742d35cc...", 84532)
+
+# Parse DID
+parsed = DIDResolver.parse_did(did)
+print(parsed.chain_id)  # 84532
+print(parsed.address)   # '0x742d35cc...'
+
+# Resolve to DID Document
+resolver = await DIDResolver.create(network="base-sepolia")
+result = await resolver.resolve(did)
+
+# Verify signature
+is_valid = await resolver.verify_signature(
+    did=did,
+    message="Hello",
+    signature="0x...",
+    chain_id=84532
+)
+```
+
 ## Common Mistakes
 
 ### 1. Missing `await`

@@ -176,6 +176,42 @@ npx actp tx status 0xTxId
 npx actp tx watch 0xTxId
 ```
 
+## Decentralized Identifiers (DIDs)
+
+Every Ethereum address automatically IS a DID - no registration required:
+
+```
+did:ethr:84532:0x742d35cc6634c0532925a3b844bc9e7595f0beb
+       ↑      ↑
+   chainId  address
+```
+
+### Basic DID Operations
+
+```typescript
+import { DIDResolver } from '@agirails/sdk';
+
+// Build DID from address
+const did = DIDResolver.buildDID('0x742d35cc...', 84532);
+
+// Parse DID
+const parsed = DIDResolver.parseDID(did);
+console.log(parsed.chainId);  // 84532
+console.log(parsed.address);  // '0x742d35cc...'
+
+// Resolve to DID Document
+const resolver = await DIDResolver.create({ network: 'base-sepolia' });
+const result = await resolver.resolve(did);
+
+// Verify signature
+const isValid = await resolver.verifySignature(
+  did,
+  'Hello',
+  '0x...',
+  { chainId: 84532 }
+);
+```
+
 ## Common Mistakes
 
 ### 1. Missing `await`
