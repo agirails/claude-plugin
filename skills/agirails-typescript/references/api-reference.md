@@ -22,6 +22,8 @@ interface ACTPClientConfig {
     maxFeePerGas?: bigint;
     maxPriorityFeePerGas?: bigint;
   };
+  easConfig?: EASConfig;            // Optional EAS config (testnet/mainnet)
+  requireAttestation?: boolean;    // Require attestation on releaseEscrow
 }
 
 const client = await ACTPClient.create({
@@ -35,8 +37,7 @@ const client = await ACTPClient.create({
 ```typescript
 client.basic      // BasicAdapter - simple payment methods
 client.standard   // StandardAdapter - explicit lifecycle control
-client.advanced   // IACTPRuntime - direct protocol access (same as client.runtime)
-client.runtime    // IACTPRuntime - the underlying runtime
+client.advanced   // IACTPRuntime - direct protocol access
 client.info       // { mode, address, stateDirectory }
 ```
 
@@ -157,8 +158,12 @@ type TransactionState =
   | 'INITIATED' | 'QUOTED' | 'COMMITTED' | 'IN_PROGRESS'
   | 'DELIVERED' | 'SETTLED' | 'DISPUTED' | 'CANCELLED';
 
-// Provider marks work as delivered
-await client.standard.transitionState(txId, 'DELIVERED');
+import { ethers } from 'ethers';
+
+// Provider marks work as delivered (IN_PROGRESS required)
+await client.standard.transitionState(txId, 'IN_PROGRESS');
+const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
+await client.standard.transitionState(txId, 'DELIVERED', proof);
 
 // Valid transitions:
 // INITIATED → QUOTED, COMMITTED, CANCELLED
@@ -209,7 +214,9 @@ const tx = await client.standard.getTransaction('0x...');
 Direct access to the underlying runtime (IACTPRuntime).
 
 ```typescript
-// client.advanced is the same as client.runtime
+import { ethers } from 'ethers';
+
+// client.advanced is the runtime
 const runtime = client.advanced;
 
 // Create transaction with protocol-level params
@@ -225,7 +232,9 @@ const txId = await runtime.createTransaction({
 const tx = await runtime.getTransaction(txId);
 
 // State transitions
-await runtime.transitionState(txId, 'DELIVERED');
+const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
+await runtime.transitionState(txId, 'IN_PROGRESS');
+await runtime.transitionState(txId, 'DELIVERED', proof);
 
 // Escrow operations
 await runtime.linkEscrow(txId, amount);

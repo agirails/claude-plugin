@@ -67,6 +67,7 @@ import os
 client = await ACTPClient.create(
     mode="testnet",
     private_key=os.environ["PRIVATE_KEY"],
+    requester_address=os.environ["REQUESTER_ADDRESS"],
     rpc_url="https://sepolia.base.org",  # Optional
 )
 ```
@@ -77,6 +78,7 @@ client = await ACTPClient.create(
 client = await ACTPClient.create(
     mode="mainnet",
     private_key=os.environ["PRIVATE_KEY"],
+    requester_address=os.environ["REQUESTER_ADDRESS"],
     rpc_url=os.environ["BASE_RPC_URL"],
 )
 ```
@@ -90,10 +92,10 @@ result = await client.basic.pay({
     "to": "0xProviderAddress",
     "amount": 100.00,              # Float or string
     "deadline": "24h",             # Relative or absolute
-    "service_description": "AI image generation",
+    "description": "AI image generation",
 })
 
-# result: PayResult(tx_id, state, amount, fee, deadline)
+# result: PayResult(tx_id, state, amount, deadline)
 ```
 
 ### Check Status
@@ -101,9 +103,7 @@ result = await client.basic.pay({
 ```python
 status = await client.basic.check_status(tx_id)
 
-if status.can_release:
-    await client.standard.release_escrow(tx_id)
-elif status.can_dispute:
+if status.can_dispute:
     await client.standard.transition_state(tx_id, "DISPUTED")
 ```
 

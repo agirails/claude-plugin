@@ -14,7 +14,7 @@ The AGIRAILS SDK provides a three-tier API designed for different use cases and 
 │  One-liner operations • Auto-handles everything • Best for AI   │
 ├─────────────────────────────────────────────────────────────────┤
 │                   STANDARD API (client.standard)                 │
-│  State management • Event listening • Full control              │
+│  State management • Explicit lifecycle • Full control           │
 ├─────────────────────────────────────────────────────────────────┤
 │                   ADVANCED API (client.advanced)                 │
 │  Direct contract calls • Custom transactions • Maximum flex     │
@@ -27,7 +27,7 @@ The AGIRAILS SDK provides a three-tier API designed for different use cases and 
 |----------------|----------|
 | AI agent making payments | Basic API |
 | Simple pay/receive flow | Basic API |
-| Need transaction monitoring | Standard API |
+| Need transaction monitoring | Advanced API + custom indexer |
 | Custom error handling | Standard API |
 | Building a dashboard | Standard API |
 | Multi-step workflows | Standard API |
@@ -57,24 +57,16 @@ const result = await client.basic.pay({
 
 // Check transaction status
 const status = await client.basic.checkStatus(txId);
-// Returns: { state, canRelease, canDispute, canCancel, ... }
-
-// Release payment to provider (after DELIVERED)
-await client.standard.releaseEscrow(txId);
-
-// Raise a dispute (after DELIVERED, within dispute window)
-await client.standard.transitionState(txId, 'DISPUTED');
-
-// Cancel transaction (before DELIVERED)
-await client.standard.transitionState(txId, 'CANCELLED');
+// Returns: { state, canAccept, canComplete, canDispute }
 ```
 
+Use the Standard API for state transitions and escrow release.
+
 **What Basic API handles automatically:**
-- USDC approval if needed
-- Gas estimation
-- Transaction confirmation waiting
-- Error translation to friendly messages
-- Retry on transient failures
+- Input validation and normalization
+- Smart defaults (deadline, dispute window)
+- Escrow linking inside `pay()`
+- User-friendly output formatting
 
 For detailed API reference, see `references/api-tiers.md`.
 
@@ -85,22 +77,21 @@ Mid-level abstraction. More control over individual steps.
 **Best for:**
 - Production applications
 - Custom UX flows
-- Event-driven architectures
-- When you need to monitor state changes
+- Explicit lifecycle control
 
 **Key Methods:**
 
 ```typescript
 // Create transaction
-const tx = await client.standard.createTransaction({
+const txId = await client.standard.createTransaction({
   provider: providerAddress,
-  amount: parseUnits('100', 6),
-  deadline: Math.floor(Date.now() / 1000) + 86400,
+  amount: '100',
+  deadline: '+24h',
   disputeWindow: 172800,
 });
 
 // Link escrow (separate step)
-await client.standard.linkEscrow(tx.txId);
+await client.standard.linkEscrow(txId);
 
 // Get full transaction details
 const details = await client.standard.getTransaction(txId);
@@ -113,10 +104,7 @@ const abiCoder = ethers.AbiCoder.defaultAbiCoder();
 const proof = abiCoder.encode(['uint256'], [172800]); // 2 days
 await client.standard.transitionState(txId, 'DELIVERED', proof);
 
-// Listen to events
-client.standard.on('StateChanged', (event) => {
-  console.log(`TX ${event.txId}: ${event.oldState} → ${event.newState}`);
-});
+// For monitoring, use on-chain events (ethers/web3) or polling.
 ```
 
 **When to upgrade from Basic to Standard:**
@@ -177,16 +165,19 @@ The SDK supports three modes:
 ### Mock Mode
 
 ```typescript
+import { IMockRuntime } from '@agirails/sdk';
+
 const client = await ACTPClient.create({
   mode: 'mock',
   requesterAddress: '0x...',
 });
 
 // Mint unlimited test tokens
-await client.mock.mint(address, 10000);
+// Mint uses USDC wei (6 decimals): 1000 USDC = 1_000_000_000
+await client.mintTokens(address, '1000000000');
 
 // Fast-forward time (testing)
-await client.mock.advanceTime(3600); // 1 hour
+await (client.advanced as IMockRuntime).time.advanceTime(3600); // 1 hour
 ```
 
 **Mock mode features:**
@@ -202,6 +193,7 @@ await client.mock.advanceTime(3600); // 1 hour
 const client = await ACTPClient.create({
   mode: 'testnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS!,
   rpcUrl: 'https://sepolia.base.org',
 });
 ```
@@ -217,6 +209,7 @@ const client = await ACTPClient.create({
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS!,
   rpcUrl: process.env.BASE_RPC_URL,
 });
 ```
@@ -242,7 +235,7 @@ async function payForService(providerAddress: string, amount: string) {
     deadline: '+24h',
   });
 
-  // Wait for delivery and auto-release
+  // Wait for delivery and release when ready
   return result.txId;
 }
 ```
@@ -250,37 +243,29 @@ async function payForService(providerAddress: string, amount: string) {
 ### Pattern: Provider Service
 
 ```typescript
-// Use Standard API for event-driven flow
-client.standard.on('TransactionCreated', async (event) => {
-  if (event.provider === myAddress) {
-    // New job for me!
-    await processJob(event.txId);
-    // IN_PROGRESS required before DELIVERED
-    await client.standard.transitionState(event.txId, 'IN_PROGRESS');
-    // DELIVERED with ABI-encoded dispute window proof
-    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    const proof = abiCoder.encode(['uint256'], [172800]);
-    await client.standard.transitionState(event.txId, 'DELIVERED', proof);
-  }
-});
+// Trigger this from your own event monitor (ethers) or polling loop
+async function handleJob(txId: string) {
+  await processJob(txId);
+  await client.standard.transitionState(txId, 'IN_PROGRESS');
+  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+  const proof = abiCoder.encode(['uint256'], [172800]);
+  await client.standard.transitionState(txId, 'DELIVERED', proof);
+}
 ```
 
 ### Pattern: Dashboard/Monitoring
 
 ```typescript
-// Use Standard API for full data access
-async function getDashboardData(address: string) {
-  const transactions = await client.standard.getTransactions({
-    participant: address,
-    states: ['COMMITTED', 'IN_PROGRESS', 'DELIVERED', 'DISPUTED'],
-  });
-
-  return transactions.map(tx => ({
-    id: tx.txId,
-    state: tx.state,
-    amount: formatUnits(tx.amount, 6),
-    deadline: new Date(tx.deadline * 1000),
-  }));
+// Build a dashboard from your own indexer or on-chain events
+// Then hydrate each txId with runtime data as needed.
+async function getDashboardRow(txId: string) {
+  const tx = await client.standard.getTransaction(txId);
+  return {
+    id: tx?.id,
+    state: tx?.state,
+    amountWei: tx?.amount,
+    deadline: tx ? new Date(tx.deadline * 1000) : null,
+  };
 }
 ```
 
@@ -292,11 +277,10 @@ You can mix tiers as needed:
 // Start with Basic
 const result = await client.basic.pay({...});
 
-// Use Standard for monitoring
-client.standard.on('StateChanged', handleChange);
+// For monitoring, use on-chain events or polling
 
 // Access Advanced when needed
-const rawTx = await client.advanced.kernel.getTransaction(result.txId);
+const rawTx = await client.advanced.getTransaction(result.txId);
 ```
 
 ## Related Resources

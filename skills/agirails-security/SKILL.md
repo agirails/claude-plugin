@@ -15,12 +15,14 @@ Security is critical when handling payments. Follow these guidelines to protect 
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey: '0x1234567890abcdef...', // CRITICAL BUG
+  requesterAddress: '0xYourAddress',
 });
 
 // CORRECT - Use environment variables
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS,
 });
 ```
 
@@ -195,9 +197,12 @@ function verifyAddress(input: string, expected: string) {
 **Mitigation:**
 ```typescript
 // Check balance before transaction
-const balance = await client.basic.getBalance();
-if (parseFloat(balance) < parseFloat(amount) * 1.01) {
-  throw new Error(`Insufficient balance: ${balance} < ${amount}`);
+import { ethers } from 'ethers';
+
+const balanceWei = await client.getBalance(client.getAddress());
+const neededWei = (ethers.parseUnits(amount, 6) * 101n) / 100n; // +1% buffer
+if (BigInt(balanceWei) < neededWei) {
+  throw new Error(`Insufficient balance: ${balanceWei} < ${neededWei}`);
 }
 ```
 

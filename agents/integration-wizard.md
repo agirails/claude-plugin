@@ -117,7 +117,6 @@ export function createPaymentTool(client: ACTPClient) {
           to: provider,
           amount,
           deadline: '+24h',
-          serviceDescription: service,
         });
         return `Payment created! Transaction ID: ${result.txId}`;
       } catch (error) {
@@ -143,6 +142,7 @@ export async function initPayments() {
   client = await ACTPClient.create({
     mode: process.env.NODE_ENV === 'production' ? 'mainnet' : 'mock',
     privateKey: process.env.PRIVATE_KEY,
+    requesterAddress: process.env.REQUESTER_ADDRESS,
   });
 }
 
@@ -155,14 +155,12 @@ router.post('/payments', async (req, res) => {
       to: provider,
       amount,
       deadline: '+24h',
-      serviceDescription: service,
     });
 
     res.json({
       success: true,
       transactionId: result.txId,
       state: result.state,
-      fee: result.fee,
     });
   } catch (error) {
     res.status(400).json({
@@ -200,6 +198,7 @@ class ACTPService:
         self.client = await ACTPClient.create(
             mode=mode,
             private_key=os.environ.get("PRIVATE_KEY"),
+            requester_address=os.environ.get("REQUESTER_ADDRESS"),
         )
 
     async def create_payment(
@@ -216,12 +215,11 @@ class ACTPService:
                 "to": provider,
                 "amount": amount,
                 "deadline": "24h",
-                "service_description": service,
+                "description": service,
             })
             return {
                 "transaction_id": result.tx_id,
                 "state": result.state,
-                "fee": result.fee,
             }
         except Exception as e:
             raise HTTPException(400, str(e))
@@ -234,7 +232,7 @@ actp_service = ACTPService()
 1. **Mock mode testing** (no blockchain needed)
    ```typescript
    const client = await ACTPClient.create({ mode: 'mock' });
-   await client.mock.mint('0xYourAddress', 10000); // Mint test funds
+   await client.mintTokens('0xYourAddress', '10000000000'); // 10,000 USDC (6 decimals)
    ```
 
 2. **Integration tests**

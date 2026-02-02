@@ -6,13 +6,10 @@
 |---------|-------|----------|----------|
 | **Abstraction** | Highest | Medium | Lowest |
 | **Lines of code** | Fewest | Moderate | Most |
-| **Auto USDC approval** | Yes | No | No |
-| **Auto gas estimation** | Yes | Yes | No |
-| **Auto retries** | Yes | No | No |
-| **Event listeners** | No | Yes | Yes |
-| **Batch operations** | No | No | Yes |
-| **Custom gas strategies** | No | No | Yes |
-| **Raw contract access** | No | No | Yes |
+| **Lifecycle control** | Minimal | Explicit | Full |
+| **Runtime access** | No | Partial | Full |
+| **Event indexing** | No | No | Bring your own |
+| **Raw contract access** | No | No | In blockchain modes (via runtime) |
 
 ## Basic API Reference
 
@@ -23,18 +20,18 @@ Create and fund a transaction in one call.
 ```typescript
 interface PayOptions {
   to: string;           // Provider address
-  amount: string;       // Amount in USDC (e.g., '100.00')
-  deadline?: string;    // '+1h', '+24h', '+7d', or timestamp
+  amount: string | number; // Amount in USDC (e.g., '100.00')
+  deadline?: string | number; // '+1h', '+24h', '+7d', or timestamp
   disputeWindow?: number; // Seconds (default: 172800 = 48h)
-  serviceDescription?: string; // Optional metadata
 }
 
 interface PayResult {
   txId: string;         // Transaction ID
+  provider: string;     // Provider address
+  requester: string;    // Requester address
+  amount: string;       // Formatted amount ("100.00 USDC")
+  deadline: string;     // ISO 8601 timestamp
   state: string;        // 'COMMITTED'
-  amount: string;       // Formatted amount
-  fee: string;          // Platform fee
-  deadline: Date;       // Deadline as Date
 }
 
 const result = await client.basic.pay({
@@ -50,31 +47,15 @@ Get transaction status with action hints.
 
 ```typescript
 interface StatusResult {
-  txId: string;
   state: string;
-  stateCode: number;
-  amount: string;
-  fee: string;
-  requester: string;
-  provider: string;
-  deadline: Date;
-  disputeWindowEnd: Date | null;
-
-  // Action hints
-  canRelease: boolean;
+  canAccept: boolean;
+  canComplete: boolean;
   canDispute: boolean;
-  canCancel: boolean;
-  isTerminal: boolean;
-
-  // Time info
-  timeToDeadline: string | null;    // '23h 45m'
-  timeToAutoSettle: string | null;  // '47h 15m'
 }
 
 const status = await client.basic.checkStatus('0x...');
-if (status.canRelease) {
-  // Use Standard API for state transitions and escrow release
-  await client.standard.releaseEscrow(status.txId);
+if (status.canComplete) {
+  // Provider can transition to IN_PROGRESS / DELIVERED
 }
 ```
 
@@ -91,15 +72,12 @@ await client.standard.transitionState(txId, 'DISPUTED');
 await client.standard.transitionState(txId, 'CANCELLED');
 ```
 
-### `client.basic.getBalance(address?)`
+### `client.getBalance(address)`
 
-Get USDC balance.
+Get USDC balance (mock mode only, returns wei).
 
 ```typescript
-const balance = await client.basic.getBalance();
-// '1234.56'
-
-const otherBalance = await client.basic.getBalance('0x...');
+const balance = await client.getBalance('0x...');
 ```
 
 ---
@@ -113,32 +91,27 @@ Create a transaction without funding.
 ```typescript
 interface CreateOptions {
   provider: string;
-  amount: bigint;       // In USDC base units (6 decimals)
-  deadline: number;     // Unix timestamp
-  disputeWindow: number; // Seconds
-  metadata?: string;
+  amount: string | number;  // User-friendly format
+  deadline?: string | number; // '+24h' or Unix timestamp
+  disputeWindow?: number;   // Seconds
+  serviceDescription?: string;
 }
 
-const tx = await client.standard.createTransaction({
+const txId = await client.standard.createTransaction({
   provider: '0x...',
-  amount: parseUnits('100', 6),
-  deadline: Math.floor(Date.now() / 1000) + 86400,
+  amount: '100',
+  deadline: '+24h',
   disputeWindow: 172800,
 });
-// tx.state === 'INITIATED'
+// txId returned (state is INITIATED)
 ```
 
 ### `client.standard.linkEscrow(txId)`
 
-Lock funds in escrow. Requires prior USDC approval.
+Lock funds in escrow (auto-transitions to COMMITTED).
 
 ```typescript
-// First approve USDC
-await client.standard.approveUSDC(amount);
-
-// Then link escrow
 await client.standard.linkEscrow('0x...');
-// State transitions to COMMITTED
 ```
 
 ### `client.standard.transitionState(txId, state, options?)`
@@ -146,6 +119,8 @@ await client.standard.linkEscrow('0x...');
 Transition transaction to new state.
 
 ```typescript
+import { ethers } from 'ethers';
+
 // Provider marks as in-progress (REQUIRED before DELIVERED)
 await client.standard.transitionState('0x...', 'IN_PROGRESS');
 
@@ -161,77 +136,36 @@ Get full transaction details.
 
 ```typescript
 interface Transaction {
-  txId: string;
+  id: string;
   requester: string;
   provider: string;
-  amount: bigint;
-  fee: bigint;
+  amount: string; // USDC wei (string)
   state: string;
-  stateCode: number;
   deadline: number;
   disputeWindow: number;
-  createdAt: number;
-  committedAt: number | null;
-  deliveredAt: number | null;
-  settledAt: number | null;
-  resultHash: string | null;
-  resultUrl: string | null;
+  completedAt: number | null;
+  escrowId: string | null;
 }
 
 const tx = await client.standard.getTransaction('0x...');
 ```
 
-### `client.standard.getTransactions(filter)`
-
-Query multiple transactions.
-
-```typescript
-interface TransactionFilter {
-  requester?: string;
-  provider?: string;
-  participant?: string; // Either requester or provider
-  states?: string[];
-  fromBlock?: number;
-  toBlock?: number;
-  limit?: number;
-}
-
-const transactions = await client.standard.getTransactions({
-  participant: myAddress,
-  states: ['COMMITTED', 'IN_PROGRESS', 'DELIVERED'],
-  limit: 100,
-});
-```
-
-### `client.standard.on(event, handler)`
-
-Subscribe to events.
-
-```typescript
-// State changes
-client.standard.on('StateChanged', (event) => {
-  console.log(event.txId, event.oldState, event.newState);
-});
-
-// New transactions for you
-client.standard.on('TransactionCreated', (event) => {
-  if (event.provider === myAddress) {
-    handleNewJob(event);
-  }
-});
-
-// Disputes
-client.standard.on('DisputeRaised', (event) => {
-  console.log('Dispute on', event.txId, event.reason);
-});
-```
+**Note:** Standard API does not include event listeners or transaction queries.
+For monitoring, use on-chain events (ethers/web3) or your own indexer.
 
 ### `client.standard.releaseEscrow(txId)`
 
 Release funds to provider.
 
 ```typescript
+// Mock mode (no attestation required)
 await client.standard.releaseEscrow('0x...');
+
+// Testnet/Mainnet (attestation required)
+await client.standard.releaseEscrow('0x...', {
+  txId: '0x...',
+  attestationUID: '0x...',
+});
 ```
 
 ### Raising a Dispute
@@ -247,85 +181,28 @@ await client.standard.transitionState('0x...', 'DISPUTED');
 
 ## Advanced API Reference
 
-### `client.advanced.kernel`
+### `client.advanced` (IACTPRuntime)
 
-Direct access to ACTPKernel contract.
-
-```typescript
-const kernel = client.advanced.kernel;
-
-// Call any contract method
-const tx = await kernel.getTransaction('0x...');
-
-// Populate transaction without sending
-const unsignedTx = await kernel.populateTransaction.createTransaction(
-  provider,
-  amount,
-  deadline,
-  disputeWindow
-);
-
-// Query events
-const filter = kernel.filters.StateChanged('0x...');
-const events = await kernel.queryFilter(filter, fromBlock, toBlock);
-```
-
-### `client.advanced.escrow`
-
-Direct access to EscrowVault contract.
+Direct access to the runtime (lowest-level API).
 
 ```typescript
-const escrow = client.advanced.escrow;
+const runtime = client.advanced;
 
-// Get escrow balance for transaction
-const balance = await escrow.getBalance('0x...');
-
-// Get total vault balance
-const totalVault = await escrow.totalBalance();
-```
-
-### `client.advanced.usdc`
-
-Direct access to USDC contract.
-
-```typescript
-const usdc = client.advanced.usdc;
-
-// Check allowance
-const allowance = await usdc.allowance(myAddress, kernelAddress);
-
-// Approve spending
-await usdc.approve(kernelAddress, amount);
-```
-
-### `client.advanced.createBatch()`
-
-Batch multiple operations.
-
-```typescript
-const batch = client.advanced.createBatch();
-
-// Add operations
-batch.add(kernel.interface.encodeFunctionData('createTransaction', [...]));
-batch.add(escrow.interface.encodeFunctionData('linkEscrow', [...]));
-
-// Execute atomically (if multicall supported)
-const results = await batch.execute();
-```
-
-### `client.advanced.estimateGas(tx)`
-
-Custom gas estimation.
-
-```typescript
-const gas = await client.advanced.estimateGas({
-  to: kernelAddress,
-  data: kernel.interface.encodeFunctionData('createTransaction', [...]),
+const txId = await runtime.createTransaction({
+  provider: '0x...',
+  requester: '0x...',
+  amount: '100000000', // USDC wei (6 decimals)
+  deadline: Math.floor(Date.now() / 1000) + 86400,
+  disputeWindow: 172800,
 });
 
-// Add buffer
-const gasWithBuffer = gas * 120n / 100n;
+const tx = await runtime.getTransaction(txId);
+await runtime.transitionState(txId, 'IN_PROGRESS');
 ```
+
+**Note:** In blockchain modes, the runtime also exposes contract instances
+(`kernel`, `escrow`, `usdc`) on the concrete runtime object. These are not part
+of the generic interface, so you may need to cast to `any` to access them.
 
 ---
 
@@ -350,8 +227,12 @@ try {
 ### Standard API Errors
 
 ```typescript
+import { ethers } from 'ethers';
+
 try {
-  await client.standard.transitionState(txId, 'DELIVERED');
+  await client.standard.transitionState(txId, 'IN_PROGRESS');
+  const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
+  await client.standard.transitionState(txId, 'DELIVERED', proof);
 } catch (error) {
   if (error instanceof InvalidStateTransitionError) {
     console.log('Cannot transition from', error.currentState);

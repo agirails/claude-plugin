@@ -162,12 +162,13 @@ async function main() {
     requesterAddress: '0x1234567890123456789012345678901234567890',
   });
 
-  // Check balance
-  const balance = await client.basic.getBalance();
-  console.log('Balance:', balance, 'USDC');
+  // Check balance (USDC wei)
+  const balance = await client.getBalance(client.getAddress());
+  console.log('Balance (wei):', balance);
 
   // Mint test tokens (mock mode only)
-  await client.mock.mint('0x1234...', 1000);
+  // Mint uses USDC wei (6 decimals): 1000 USDC = 1_000_000_000
+  await client.mintTokens('0x1234...', '1000000000');
 
   // Create a payment
   const result = await client.basic.pay({
@@ -195,11 +196,11 @@ async def main():
     )
 
     # Check balance
-    balance = await client.basic.get_balance()
+    balance = await client.get_balance()
     print(f"Balance: {balance} USDC")
 
     # Mint test tokens (mock mode only)
-    await client.mock.mint("0x1234...", 1000)
+    await client.mint_tokens("0x1234...", 1000)
 
     # Create a payment
     result = await client.basic.pay({

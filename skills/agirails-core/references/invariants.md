@@ -4,10 +4,10 @@ These 10 invariants must hold true at all times. Any violation indicates a criti
 
 ## 1. Escrow Solvency
 
-**Statement:** The escrow vault balance must always be greater than or equal to the sum of all active transaction amounts plus fees.
+**Statement:** The escrow vault balance must always be greater than or equal to the sum of all active transaction amounts (gross amounts before fees).
 
 ```
-escrowVault.balance(USDC) ≥ Σ(all active transaction amounts + fees)
+escrowVault.balance(USDC) ≥ Σ(all active transaction gross amounts)
 ```
 
 **Active States:** COMMITTED, IN_PROGRESS, DELIVERED, DISPUTED
@@ -21,7 +21,7 @@ function invariant_escrowSolvency() public {
     for (uint i = 0; i < allTransactionIds.length; i++) {
         Transaction memory tx = getTransaction(allTransactionIds[i]);
         if (tx.state >= State.COMMITTED && tx.state <= State.DISPUTED) {
-            totalLocked += tx.amount + tx.fee;
+            totalLocked += tx.amount;
         }
     }
 
@@ -99,7 +99,7 @@ function invariant_feeBounds() public {
 **Statement:** Transactions cannot progress to DELIVERED state after deadline has passed.
 
 ```
-transitionState(DELIVERED) requires: block.timestamp ≤ tx.deadline
+transitionState(DELIVERED, disputeWindowProof) requires: block.timestamp ≤ tx.deadline
 ```
 
 **Test Pattern:**
@@ -107,13 +107,15 @@ transitionState(DELIVERED) requires: block.timestamp ≤ tx.deadline
 function test_deadlineEnforcement() public {
     bytes32 txId = createTransaction(...);
     linkEscrow(txId);
+    transitionState(txId, State.IN_PROGRESS);
+    bytes memory proof = abi.encode(uint256(172800));
 
     // Warp past deadline
     vm.warp(block.timestamp + deadline + 1);
 
     // Should revert
     vm.expectRevert("Deadline passed");
-    transitionState(txId, State.DELIVERED);
+    transitionState(txId, State.DELIVERED, proof);
 }
 ```
 
@@ -134,11 +136,11 @@ function test_deadlineEnforcement() public {
 | linkEscrow | Requester only |
 | transitionState(QUOTED) | Provider only |
 | transitionState(IN_PROGRESS) | Provider only |
-| transitionState(DELIVERED) | Provider only |
+| transitionState(DELIVERED, disputeWindowProof) | Provider only |
 | releaseEscrow | Requester only |
 | transitionState(DISPUTED) | Requester or Provider |
-| resolveDispute | Mediator only |
-| cancel | Requester (INITIATED/QUOTED), Either (COMMITTED) |
+| transitionState(SETTLED) | Admin/Pauser only (with proof) |
+| transitionState(CANCELLED) | Requester (INITIATED/QUOTED), Either (COMMITTED) |
 | pause | Admin only |
 | setFee | Admin only (with timelock) |
 
@@ -147,7 +149,9 @@ function test_deadlineEnforcement() public {
 function test_accessControl_releaseEscrow() public {
     bytes32 txId = createTransaction(requester, provider, ...);
     linkEscrow(txId);
-    transitionState(txId, State.DELIVERED);
+    transitionState(txId, State.IN_PROGRESS);
+    bytes memory proof = abi.encode(uint256(172800));
+    transitionState(txId, State.DELIVERED, proof);
 
     // Provider tries to release (should fail)
     vm.prank(provider);

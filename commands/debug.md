@@ -60,10 +60,13 @@ Options:
 **Check SDK Connection:**
 ```typescript
 // Test connection
-const client = await ACTPClient.create({ mode: 'mock' });
-console.log('Connected:', client.isConnected);
-console.log('Mode:', client.mode);
-console.log('Network:', client.network);
+const client = await ACTPClient.create({
+  mode: 'mock',
+  requesterAddress: '0xYourAddress',
+});
+console.log('Mode:', client.getMode());
+console.log('Address:', client.getAddress());
+console.log('Info:', client.info);
 ```
 
 **Check Transaction State:**
@@ -79,9 +82,9 @@ console.log('Is expired:', tx.deadline < Date.now() / 1000);
 
 **Check Balances:**
 ```typescript
-const balance = await client.basic.getBalance();
+const balance = await client.getBalance(client.getAddress());
 const escrowBalance = await client.standard.getEscrowBalance('0x...');
-console.log('USDC Balance:', balance);
+console.log('USDC Balance (wei):', balance);
 console.log('Locked in Escrow:', escrowBalance);
 ```
 
@@ -94,7 +97,7 @@ Common Mock Mode Problems:
    Fix: Re-create transaction or persist mock state
 
 2. "Balance is 0" - Need to mint test tokens
-   Fix: await client.mock.mint('0xYourAddress', 1000);
+   Fix: await client.mintTokens('0xYourAddress', '1000000000'); // 1000 USDC (6 decimals)
 
 3. "Different results than testnet" - Mock simplifies blockchain behavior
    Fix: Test critical paths on testnet before mainnet
@@ -117,26 +120,36 @@ Common Testnet Problems:
 
 ```
 Transaction State Flow:
-INITIATED → Can: linkEscrow(), cancel()
-QUOTED → Can: linkEscrow(), cancel()
-COMMITTED → Can: transitionState(IN_PROGRESS), cancel()
-IN_PROGRESS → Can: transitionState(DELIVERED)
-DELIVERED → Can: release(), dispute()
-DISPUTED → Waiting for: resolution
+INITIATED → Can: linkEscrow(), transitionState(CANCELLED)
+QUOTED → Can: linkEscrow(), transitionState(CANCELLED)
+COMMITTED → Can: transitionState(IN_PROGRESS), transitionState(CANCELLED)
+IN_PROGRESS → Can: transitionState(DELIVERED, proof), transitionState(CANCELLED)
+DELIVERED → Can: releaseEscrow(), transitionState(DISPUTED)
+DISPUTED → Admin/Pauser: transitionState(SETTLED, resolutionProof) or transitionState(CANCELLED)
 SETTLED → Terminal (no actions)
 CANCELLED → Terminal (no actions)
+
+Note: In testnet/mainnet, releaseEscrow() requires an attestation UID.
 ```
 
 **State Transition Errors:**
 ```typescript
 // Check if transition is valid
-const canTransition = await client.standard.canTransition(txId, 'DELIVERED');
-console.log('Can transition to DELIVERED:', canTransition);
-if (!canTransition) {
-  const current = await client.standard.getTransaction(txId);
-  console.log('Current state:', current.state);
-  console.log('Valid next states:', getValidTransitions(current.state));
-}
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  INITIATED: ['QUOTED', 'COMMITTED', 'CANCELLED'],
+  QUOTED: ['COMMITTED', 'CANCELLED'],
+  COMMITTED: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['DELIVERED', 'CANCELLED'],
+  DELIVERED: ['SETTLED', 'DISPUTED'],
+  DISPUTED: ['SETTLED', 'CANCELLED'],
+  SETTLED: [],
+  CANCELLED: [],
+};
+
+const current = await client.standard.getTransaction(txId);
+const validNext = current ? (VALID_TRANSITIONS[current.state] ?? []) : [];
+console.log('Current state:', current?.state);
+console.log('Valid next states:', validNext);
 ```
 
 ### Step 6: Output Format
@@ -172,25 +185,27 @@ if (!canTransition) {
 ```typescript
 // Step 1: Check state
 const status = await client.basic.checkStatus(txId);
+const tx = await client.standard.getTransaction(txId);
+const now = client.advanced.time.now();
 
 // Step 2: Determine action based on state
 switch (status.state) {
   case 'COMMITTED':
-    // Wait or cancel
-    if (status.isDeadlinePassed) {
+    // Wait or cancel if deadline passed
+    if (tx && tx.deadline <= now) {
       await client.standard.transitionState(txId, 'CANCELLED');
     }
     break;
   case 'DELIVERED':
-    // Release or dispute
-    if (status.isDeliveryAcceptable) {
+    // Release only after dispute window
+    if (tx && tx.completedAt !== null && tx.completedAt + tx.disputeWindow <= now) {
       await client.standard.releaseEscrow(txId);
     } else {
       await client.standard.transitionState(txId, 'DISPUTED');
     }
     break;
   case 'DISPUTED':
-    // Wait for resolution
+    // Wait for resolution (admin/pauser)
     console.log('Waiting for mediator resolution');
     break;
 }

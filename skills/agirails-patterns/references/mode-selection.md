@@ -35,27 +35,26 @@ client = await ACTPClient.create(
 
 **Unlimited Test Funds:**
 ```typescript
-// Mint any amount
-await client.mock.mint('0x...', 1000000); // 1M USDC
+// Mint any amount (USDC wei, 6 decimals)
+await client.mintTokens('0x...', '1000000000000'); // 1,000,000 USDC
 ```
 
 **Time Manipulation:**
 ```typescript
+import { IMockRuntime } from '@agirails/sdk';
+
 // Fast-forward time (for testing deadlines)
-await client.mock.advanceTime(3600); // 1 hour
-await client.mock.advanceTime(86400); // 1 day
+await (client.advanced as IMockRuntime).time.advanceTime(3600); // 1 hour
+await (client.advanced as IMockRuntime).time.advanceTime(86400); // 1 day
 
 // Set specific time
-await client.mock.setTime(1735689600); // Specific timestamp
+await (client.advanced as IMockRuntime).time.setTime(1735689600); // Specific timestamp
 ```
 
 **State Reset:**
 ```typescript
 // Clear all mock state
-await client.mock.reset();
-
-// Clear specific transaction
-await client.mock.clearTransaction('0x...');
+await client.reset();
 ```
 
 **State Persistence:**
@@ -88,6 +87,7 @@ await client.mock.clearTransaction('0x...');
 const client = await ACTPClient.create({
   mode: 'testnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS,
   rpcUrl: 'https://sepolia.base.org', // Optional, has default
 });
 ```
@@ -96,6 +96,7 @@ const client = await ACTPClient.create({
 client = await ACTPClient.create(
     mode="testnet",
     private_key=os.environ["PRIVATE_KEY"],
+    requester_address=os.environ["REQUESTER_ADDRESS"],
     rpc_url="https://sepolia.base.org",  # Optional
 )
 ```
@@ -159,6 +160,7 @@ const addresses = {
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS,
   rpcUrl: process.env.BASE_RPC_URL, // Use private RPC
 });
 ```
@@ -167,6 +169,7 @@ const client = await ACTPClient.create({
 client = await ACTPClient.create(
     mode="mainnet",
     private_key=os.environ["PRIVATE_KEY"],
+    requester_address=os.environ["REQUESTER_ADDRESS"],
     rpc_url=os.environ["BASE_RPC_URL"],
 )
 ```
@@ -255,16 +258,18 @@ const mode = process.env.AGIRAILS_MODE || 'mock';
 const client = await ACTPClient.create({
   mode,
   privateKey: mode !== 'mock' ? process.env.PRIVATE_KEY : undefined,
-  requesterAddress: mode === 'mock' ? '0x...' : undefined,
+  requesterAddress: process.env.REQUESTER_ADDRESS,
 });
 ```
 
 ```bash
 # .env.development
 AGIRAILS_MODE=mock
+REQUESTER_ADDRESS=0x...
 
 # .env.staging
 AGIRAILS_MODE=testnet
+REQUESTER_ADDRESS=0x...
 PRIVATE_KEY=0x...
 
 # .env.production
@@ -314,7 +319,7 @@ chmod 755 .actp/
 **Transactions not found:**
 ```typescript
 // State might have been reset
-await client.mock.reset();
+await client.reset();
 // Recreate transactions
 ```
 
@@ -339,8 +344,11 @@ const tx = await kernel.createTransaction(..., {
 
 **"Insufficient allowance":**
 ```typescript
-// Approve USDC spending first
-await client.standard.approveUSDC(amount);
+// Approve USDC spending first (via ERC20 approve)
+const runtime = client.advanced as any;
+const usdc = runtime.usdc;
+const kernelAddress = runtime.kernel.target;
+await usdc.approve(kernelAddress, amount);
 ```
 
 **"Nonce too low":**

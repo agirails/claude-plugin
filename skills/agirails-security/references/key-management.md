@@ -37,6 +37,7 @@ echo "PRIVATE_KEY=0x123..." >> .env.test
 const client = await ACTPClient.create({
   mode: 'testnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS,
 });
 ```
 
@@ -61,6 +62,7 @@ export PRIVATE_KEY=0x...
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS,
 });
 ```
 
@@ -101,6 +103,7 @@ const privateKey = await getPrivateKey();
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey,
+  requesterAddress: process.env.REQUESTER_ADDRESS,
 });
 ```
 

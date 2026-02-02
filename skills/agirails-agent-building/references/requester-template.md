@@ -35,15 +35,16 @@ export class RequesterAgent {
   async start() {
     // SDK handles: wallet connection, contract initialization
     this.client = await ACTPClient.create({
-      network: process.env.NETWORK as 'base-sepolia' | 'base',
+      mode: (process.env.AGIRAILS_MODE as 'mock' | 'testnet' | 'mainnet') ?? 'testnet',
       privateKey: process.env.AGENT_PRIVATE_KEY!,
+      requesterAddress: process.env.AGENT_ADDRESS!,
     });
 
     this.wallet = await this.client.getAddress();
     console.log(`Requester agent started: ${this.wallet}`);
 
     // Check balance
-    const balance = await this.client.escrow.getBalance();
+    const balance = await this.client.getBalance(this.wallet);
     console.log(`USDC Balance: ${ethers.formatUnits(balance, 6)}`);
 
     // Start listening for responses
@@ -55,28 +56,9 @@ export class RequesterAgent {
   // ============================================================
 
   private setupEventListeners() {
-    // Provider quoted a price
-    this.client.events.on('StateTransition', async (tx) => {
-      if (tx.requester.toLowerCase() === this.wallet.toLowerCase()) {
-        if (tx.state === TransactionState.QUOTED) {
-          await this.onQuoteReceived(tx);
-        }
-      }
-    });
-
-    // Work delivered
-    this.client.events.on('TransactionDelivered', async (tx) => {
-      if (tx.requester.toLowerCase() === this.wallet.toLowerCase()) {
-        await this.onDelivery(tx);
-      }
-    });
-
-    // Transaction settled
-    this.client.events.on('TransactionSettled', async (tx) => {
-      if (tx.requester.toLowerCase() === this.wallet.toLowerCase()) {
-        await this.onSettled(tx);
-      }
-    });
+    // Use your own event monitor (ethers) or polling to detect:
+    // - StateTransitioned (QUOTED, DELIVERED)
+    // - EscrowLinked / EscrowReleased
   }
 
   // ============================================================
@@ -87,18 +69,18 @@ export class RequesterAgent {
     console.log(`Requesting service from ${request.providerAddress}`);
 
     // 1. SDK HANDLES: Create transaction
-    const txId = await this.client.kernel.createTransaction({
+    const txId = await this.client.standard.createTransaction({
       provider: request.providerAddress,
       amount: request.maxBudget,
       deadline: request.deadline,
       disputeWindow: request.disputeWindow || 48 * 3600, // 48h default
-      metadata: request.task,
+      serviceDescription: request.task?.description,
     });
 
     console.log(`Transaction created: ${txId}`);
 
     // 2. SDK HANDLES: Link escrow (locks funds)
-    await this.client.escrow.link(txId);
+    await this.client.standard.linkEscrow(txId);
 
     console.log(`Escrow linked, funds locked`);
 
@@ -121,7 +103,7 @@ export class RequesterAgent {
     // YOUR LOGIC: Decide if quote is acceptable
     if (this.isQuoteAcceptable(tx.quotedAmount, request.maxBudget)) {
       // SDK HANDLES: Accept quote by linking escrow with quoted amount
-      await this.client.escrow.link(tx.id, { amount: tx.quotedAmount });
+      await this.client.standard.linkEscrow(tx.id);
       console.log(`Quote accepted, waiting for delivery`);
     } else {
       // SDK HANDLES: Cancel if quote too high
@@ -335,24 +317,25 @@ class RequesterAgent:
 
     async def start(self):
         self.client = await ACTPClient.create(
-            network="base-sepolia",
-            private_key=os.environ["AGENT_PRIVATE_KEY"]
+            mode="testnet",
+            private_key=os.environ["AGENT_PRIVATE_KEY"],
+            requester_address=os.environ["AGENT_ADDRESS"],
         )
         self.wallet = await self.client.get_address()
-        await self.setup_event_listeners()
+        # Use your own indexer or polling to detect updates
 
     async def request_service(self, request: ServiceRequest) -> str:
         # SDK HANDLES: Transaction creation
-        tx_id = await self.client.kernel.create_transaction(
+        tx_id = await self.client.standard.create_transaction(
             provider=request.provider_address,
             amount=request.max_budget,
             deadline=request.deadline,
             dispute_window=request.dispute_window,
-            metadata=request.task,
+            description=request.task.get("description"),
         )
 
         # SDK HANDLES: Escrow linking
-        await self.client.escrow.link(tx_id)
+        await self.client.standard.link_escrow(tx_id)
 
         self.pending_requests[tx_id] = request
         return tx_id

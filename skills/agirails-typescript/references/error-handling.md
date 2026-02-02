@@ -141,9 +141,9 @@ try {
     console.log(`Need ${error.required} ${error.token}`);
     console.log(`Have ${error.available} ${error.token}`);
 
-    // In mock mode, mint more
-    if (client.mode === 'mock') {
-      await client.mock.mint(address, parseFloat(error.required));
+    // In mock mode, mint more (required is in USDC wei)
+    if (client.getMode() === 'mock') {
+      await client.mintTokens(address, error.required);
     }
   }
 }
@@ -183,8 +183,12 @@ interface DeadlineExpiredError extends StateError {
   now: Date;
 }
 
+import { ethers } from 'ethers';
+
 try {
-  await client.standard.transitionState('0x...', 'DELIVERED');
+  await client.standard.transitionState('0x...', 'IN_PROGRESS');
+  const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
+  await client.standard.transitionState('0x...', 'DELIVERED', proof);
 } catch (error) {
   if (error instanceof DeadlineExpiredError) {
     console.log(`Deadline was ${error.deadline}`);

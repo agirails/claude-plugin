@@ -39,8 +39,9 @@ export class ProviderAgent {
   async start() {
     // SDK handles: wallet connection, contract initialization
     this.client = await ACTPClient.create({
-      network: process.env.NETWORK as 'base-sepolia' | 'base',
+      mode: (process.env.AGIRAILS_MODE as 'mock' | 'testnet' | 'mainnet') ?? 'testnet',
       privateKey: process.env.AGENT_PRIVATE_KEY!,
+      requesterAddress: process.env.AGENT_ADDRESS!,
     });
 
     this.wallet = await this.client.getAddress();
@@ -52,37 +53,14 @@ export class ProviderAgent {
   }
 
   // ============================================================
-  // EVENT HANDLING (SDK provides events, you handle logic)
+  // EVENT HANDLING (use your own event monitor or polling)
   // ============================================================
 
   private setupEventListeners() {
-    // New transaction created with us as provider
-    this.client.events.on('TransactionCreated', async (tx) => {
-      if (tx.provider.toLowerCase() === this.wallet.toLowerCase()) {
-        await this.onNewRequest(tx);
-      }
-    });
-
-    // Escrow linked - funds are locked, we can start work
-    this.client.events.on('EscrowLinked', async (tx) => {
-      if (tx.provider.toLowerCase() === this.wallet.toLowerCase()) {
-        await this.onCommitted(tx);
-      }
-    });
-
-    // Transaction settled - we got paid
-    this.client.events.on('TransactionSettled', async (tx) => {
-      if (tx.provider.toLowerCase() === this.wallet.toLowerCase()) {
-        await this.onSettled(tx);
-      }
-    });
-
-    // Dispute raised - need to respond
-    this.client.events.on('DisputeRaised', async (tx) => {
-      if (tx.provider.toLowerCase() === this.wallet.toLowerCase()) {
-        await this.onDispute(tx);
-      }
-    });
+    // Use your own event monitor (ethers) or polling to detect:
+    // - TransactionCreated (new jobs)
+    // - EscrowLinked (funds locked)
+    // - StateTransitioned (progress updates)
   }
 
   // ============================================================
@@ -181,8 +159,7 @@ export class ProviderAgent {
 
       console.log(`Delivered: ${tx.id}`);
 
-      // Protocol handles auto-settlement after dispute window
-      // You just wait for SETTLED event
+      // Requester (or automation) releases after dispute window
 
     } catch (error) {
       console.error(`Failed to complete job ${tx.id}:`, error);
@@ -228,9 +205,8 @@ export class ProviderAgent {
   // ============================================================
 
   private async onSettled(tx: Transaction) {
-    const earnings = tx.amount - tx.fee;
     console.log(`Settled: ${tx.id}`);
-    console.log(`Earned: ${ethers.formatUnits(earnings, 6)} USDC`);
+    console.log(`Earned (gross): ${ethers.formatUnits(tx.amount, 6)} USDC`);
 
     // YOUR LOGIC: Update your records, analytics, etc.
   }
@@ -292,6 +268,7 @@ agent.start();
 
 ```python
 from agirails import ACTPClient
+from eth_abi import encode
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 import hashlib
@@ -315,25 +292,15 @@ class ProviderAgent:
     async def start(self):
         # SDK handles: wallet connection, contract initialization
         self.client = await ACTPClient.create(
-            network="base-sepolia",
-            private_key=os.environ["AGENT_PRIVATE_KEY"]
+            mode="testnet",
+            private_key=os.environ["AGENT_PRIVATE_KEY"],
+            requester_address=os.environ["AGENT_ADDRESS"],
         )
         self.wallet = await self.client.get_address()
         print(f"Provider agent started: {self.wallet}")
 
-        # Start listening
-        await self.setup_event_listeners()
-
-    async def setup_event_listeners(self):
-        @self.client.events.on("TransactionCreated")
-        async def on_new_request(tx):
-            if tx.provider.lower() == self.wallet.lower():
-                await self.handle_request(tx)
-
-        @self.client.events.on("EscrowLinked")
-        async def on_committed(tx):
-            if tx.provider.lower() == self.wallet.lower():
-                await self.execute_job(tx)
+        # Use your own indexer or polling to detect new txIds,
+        # then call handle_request(tx) with your own transaction payload.
 
     # YOUR IMPLEMENTATION: Pricing
     def calculate_quote(self, metadata: dict) -> int:
@@ -357,10 +324,8 @@ class ProviderAgent:
         quote = self.calculate_quote(tx.metadata)
 
         # SDK HANDLES: State transition
-        await self.client.standard.transition_state(
-            tx.id, "QUOTED",
-            quoted_amount=quote
-        )
+        quote_proof = "0x" + encode(["uint256"], [quote]).hex()
+        await self.client.standard.transition_state(tx.id, "QUOTED", quote_proof)
 
     async def execute_job(self, tx):
         # SDK HANDLES: State transition (IN_PROGRESS required before DELIVERED)

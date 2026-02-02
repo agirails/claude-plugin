@@ -10,7 +10,8 @@
  * - Releasing payment
  */
 
-import { ACTPClient } from '@agirails/sdk';
+import { ACTPClient, IMockRuntime } from '@agirails/sdk';
+import { ethers } from 'ethers';
 
 // Addresses (any valid Ethereum addresses for mock mode)
 const REQUESTER_ADDRESS = '0x1111111111111111111111111111111111111111';
@@ -67,7 +68,10 @@ async function main() {
 
   // 6. Provider delivers (using Standard API for state transition)
   console.log('5. Provider delivering...');
-  await client.standard.transitionState(result.txId, 'DELIVERED');
+  await client.standard.transitionState(result.txId, 'IN_PROGRESS');
+  const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+  const proof = abiCoder.encode(['uint256'], [172800]); // 2 days
+  await client.standard.transitionState(result.txId, 'DELIVERED', proof);
   console.log('   State transitioned to DELIVERED\n');
 
   // 7. Check updated status
@@ -79,6 +83,7 @@ async function main() {
   // 8. Release payment (using Standard API)
   // escrowId equals txId in current implementation
   console.log('7. Releasing payment...');
+  await (client.advanced as IMockRuntime).time.advanceTime(172801); // 2 days + 1s
   await client.standard.releaseEscrow(result.txId);
   console.log('   Payment released to provider!\n');
 

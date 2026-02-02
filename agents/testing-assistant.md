@@ -59,7 +59,7 @@ Help developers write comprehensive tests that ensure their AGIRAILS integration
 
 ```typescript
 // __tests__/actp.test.ts
-import { ACTPClient } from '@agirails/sdk';
+import { ACTPClient, IMockRuntime } from '@agirails/sdk';
 import { InsufficientBalanceError, InvalidStateError } from '@agirails/sdk';
 import { ethers } from 'ethers';
 
@@ -77,13 +77,9 @@ describe('ACTP Integration', () => {
   });
 
   beforeEach(async () => {
-    // Reset state and mint fresh tokens
-    await client.mock.reset();
-    await client.mock.mint(REQUESTER, 10000);
-  });
-
-  afterAll(async () => {
-    await client.disconnect();
+    // Reset state and mint fresh tokens (USDC wei)
+    await client.reset();
+    await client.mintTokens(REQUESTER, '10000000000'); // 10,000 USDC
   });
 
   // Tests go here...
@@ -109,13 +105,12 @@ async def client():
         requester_address=REQUESTER,
     )
     yield client
-    await client.disconnect()
 
 
 @pytest.fixture(autouse=True)
 async def setup(client):
-    await client.mock.reset()
-    await client.mock.mint(REQUESTER, 10000)
+    await client.reset()
+    await client.mint_tokens(REQUESTER, 10000)
 
 
 # Tests go here...
@@ -135,7 +130,6 @@ describe('Happy Path', () => {
 
     expect(result.txId).toMatch(/^0x[a-f0-9]{64}$/);
     expect(result.state).toBe('COMMITTED');
-    expect(result.fee).toBe(1.00); // 1% of $100
 
     // 2. Provider starts work (IN_PROGRESS required before DELIVERED)
     await client.standard.transitionState(result.txId, 'IN_PROGRESS');
@@ -149,32 +143,33 @@ describe('Happy Path', () => {
     const afterDelivery = await client.basic.checkStatus(result.txId);
     expect(afterDelivery.state).toBe('DELIVERED');
 
-    // 4. Requester releases
+    // 4. Requester releases (after dispute window)
+    await (client.advanced as IMockRuntime).time.advanceTime(172801);
     await client.standard.releaseEscrow(result.txId);
 
     const final = await client.basic.checkStatus(result.txId);
     expect(final.state).toBe('SETTLED');
-    expect(final.isTerminal).toBe(true);
   });
 
   it('should handle payment with quote flow', async () => {
     // 1. Create transaction (INITIATED)
-    const tx = await client.standard.createTransaction({
+    const txId = await client.standard.createTransaction({
       provider: PROVIDER,
       amount: 100.00,
       deadline: '+24h',
     });
-    expect(tx.state).toBe('INITIATED');
+    const tx = await client.standard.getTransaction(txId);
+    expect(tx?.state).toBe('INITIATED');
 
     // 2. Provider quotes (QUOTED) with ABI-encoded amount
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
     const quoteProof = abiCoder.encode(['uint256'], [90000000n]); // 90 USDC (6 decimals)
-    await client.standard.transitionState(tx.txId, 'QUOTED', quoteProof);
+    await client.standard.transitionState(txId, 'QUOTED', quoteProof);
 
     // 3. Requester accepts (COMMITTED)
-    await client.standard.linkEscrow(tx.txId, { amount: 90.00 });
+    await client.standard.linkEscrow(txId);
 
-    const status = await client.basic.checkStatus(tx.txId);
+    const status = await client.basic.checkStatus(txId);
     expect(status.state).toBe('COMMITTED');
   });
 });
@@ -185,7 +180,8 @@ describe('Happy Path', () => {
 ```typescript
 describe('Error Handling', () => {
   it('should reject payment with insufficient balance', async () => {
-    await client.mock.setBalance(REQUESTER, 10); // Only $10
+    await client.reset();
+    await client.mintTokens(REQUESTER, '10000000'); // 10 USDC (wei)
 
     await expect(
       client.basic.pay({
@@ -253,10 +249,12 @@ describe('State Machine', () => {
     ['QUOTED', 'CANCELLED'],
     ['COMMITTED', 'IN_PROGRESS'],
     ['COMMITTED', 'CANCELLED'],
+    ['IN_PROGRESS', 'CANCELLED'],
     ['IN_PROGRESS', 'DELIVERED'],
     ['DELIVERED', 'SETTLED'],
     ['DELIVERED', 'DISPUTED'],
     ['DISPUTED', 'SETTLED'],
+    ['DISPUTED', 'CANCELLED'],
   ];
 
   const invalidTransitions = [
@@ -273,14 +271,14 @@ describe('State Machine', () => {
     'should allow transition from %s to %s',
     async (from, to) => {
       // Setup transaction in 'from' state
-      const tx = await setupTransactionInState(client, from);
+      const txId = await setupTransactionInState(client, from);
 
       // Attempt transition
       await expect(
-        client.standard.transitionState(tx.txId, to)
+        client.standard.transitionState(txId, to)
       ).resolves.not.toThrow();
 
-      const status = await client.basic.checkStatus(tx.txId);
+      const status = await client.basic.checkStatus(txId);
       expect(status.state).toBe(to);
     }
   );
@@ -288,10 +286,10 @@ describe('State Machine', () => {
   test.each(invalidTransitions)(
     'should reject transition from %s to %s',
     async (from, to) => {
-      const tx = await setupTransactionInState(client, from);
+      const txId = await setupTransactionInState(client, from);
 
       await expect(
-        client.standard.transitionState(tx.txId, to)
+        client.standard.transitionState(txId, to)
       ).rejects.toThrow(InvalidStateError);
     }
   );
@@ -299,7 +297,7 @@ describe('State Machine', () => {
 
 // Helper function
 async function setupTransactionInState(client: ACTPClient, targetState: string) {
-  const tx = await client.standard.createTransaction({
+  const txId = await client.standard.createTransaction({
     provider: PROVIDER,
     amount: 50.00,
     deadline: '+24h',
@@ -318,20 +316,21 @@ async function setupTransactionInState(client: ACTPClient, targetState: string) 
 
   for (const state of transitionPath[targetState]) {
     if (state === 'COMMITTED') {
-      await client.standard.linkEscrow(tx.txId);
+      await client.standard.linkEscrow(txId);
     } else if (state === 'SETTLED') {
-      await client.standard.releaseEscrow(tx.txId);
+      await (client.advanced as IMockRuntime).time.advanceTime(172801);
+      await client.standard.releaseEscrow(txId);
     } else if (state === 'DELIVERED') {
       // DELIVERED requires dispute window proof
       const abiCoder = ethers.AbiCoder.defaultAbiCoder();
       const proof = abiCoder.encode(['uint256'], [172800]);
-      await client.standard.transitionState(tx.txId, state, proof);
+      await client.standard.transitionState(txId, state, proof);
     } else {
-      await client.standard.transitionState(tx.txId, state);
+      await client.standard.transitionState(txId, state);
     }
   }
 
-  return tx;
+  return txId;
 }
 ```
 
@@ -346,12 +345,11 @@ describe('Edge Cases', () => {
       deadline: '+24h',
     });
 
-    expect(result.fee).toBe(0.05); // Minimum fee
-    expect(result.amount).toBe(0.05);
+    expect(result.amount).toContain('0.05');
   });
 
   it('should handle maximum amount', async () => {
-    await client.mock.mint(REQUESTER, 1_000_000_000);
+    await client.mintTokens(REQUESTER, '1000000000000'); // 1,000,000 USDC
 
     const result = await client.basic.pay({
       to: PROVIDER,
@@ -359,7 +357,7 @@ describe('Edge Cases', () => {
       deadline: '+24h',
     });
 
-    expect(result.fee).toBe(10_000); // 1% of $1M
+    expect(result.state).toBe('COMMITTED');
   });
 
   it('should handle deadline at exact expiry', async () => {
@@ -370,11 +368,12 @@ describe('Edge Cases', () => {
     });
 
     // Fast forward time (mock only)
-    await client.mock.advanceTime(2000); // 2 seconds
+    await (client.advanced as IMockRuntime).time.advanceTime(2000); // 2 seconds
 
     // Transaction should be cancellable now
+    await client.standard.transitionState(result.txId, 'CANCELLED');
     const status = await client.basic.checkStatus(result.txId);
-    expect(status.canCancel).toBe(true);
+    expect(status.state).toBe('CANCELLED');
   });
 
   it('should handle concurrent transactions', async () => {
@@ -400,6 +399,7 @@ describe('Edge Cases', () => {
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
     const proof = abiCoder.encode(['uint256'], [172800]);
     await client.standard.transitionState(tx.txId, 'DELIVERED', proof);
+    await (client.advanced as IMockRuntime).time.advanceTime(172801);
     await client.standard.releaseEscrow(tx.txId);
 
     const status = await client.basic.checkStatus(tx.txId);
@@ -431,11 +431,12 @@ describe('Dispute Flow', () => {
     expect(disputed.state).toBe('DISPUTED');
 
     // Resolve dispute (mock mediator)
-    await client.mock.resolveDispute(tx.txId, {
-      resolution: 'PARTIAL_REFUND',
-      requesterPercent: 70,
-      providerPercent: 30,
-    });
+    const mediator = '0x3333333333333333333333333333333333333333';
+    const resolutionProof = abiCoder.encode(
+      ['uint256', 'uint256', 'address', 'uint256'],
+      [70000000n, 30000000n, mediator, 0n]
+    );
+    await client.standard.transitionState(tx.txId, 'SETTLED', resolutionProof);
 
     const resolved = await client.basic.checkStatus(tx.txId);
     expect(resolved.state).toBe('SETTLED');
@@ -451,6 +452,7 @@ describe('Dispute Flow', () => {
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
     const proof = abiCoder.encode(['uint256'], [172800]);
     await client.standard.transitionState(tx.txId, 'DELIVERED', proof);
+    await (client.advanced as IMockRuntime).time.advanceTime(172801);
     await client.standard.releaseEscrow(tx.txId);
 
     await expect(
@@ -481,6 +483,7 @@ describe('Environment Differences', () => {
     const testnetClient = await ACTPClient.create({
       mode: 'testnet',
       privateKey: process.env.TEST_PRIVATE_KEY,
+      requesterAddress: process.env.TEST_REQUESTER_ADDRESS!,
     });
 
     const start = Date.now();
@@ -529,7 +532,7 @@ npm test -- --testPathPattern=mock
 
 ## Common Test Issues
 
-1. **Tests hang**: Ensure `afterAll` disconnects client
+1. **Tests hang**: Ensure async operations resolve (time advances are awaited)
 2. **State pollution**: Use `beforeEach` to reset state
 3. **Flaky tests**: Mock time instead of real delays
 4. **Missing await**: All ACTP calls are async

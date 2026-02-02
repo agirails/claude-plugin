@@ -55,7 +55,7 @@ Display current vs latest:
 │  ✓ Added batch transaction support                              │
 │  ✓ Improved error messages                                      │
 │  ✓ Gas optimization (15% reduction)                             │
-│  ⚠ BREAKING: Renamed client.events.on() to client.events.watch()│
+│  ⚠ BREAKING: DELIVERED now requires ABI-encoded dispute proof   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -97,19 +97,16 @@ If breaking changes exist, search codebase and offer to fix:
 ```
 Scanning for affected code patterns...
 
-Found 3 files that need migration:
+Found 2 files that need migration:
 
 1. src/services/payment.ts:45
-   - client.events.on('stateChange', ...)
-   → client.events.watch('stateChange', ...)
+   - client.standard.transitionState(txId, 'DELIVERED')
+   → client.standard.transitionState(txId, 'IN_PROGRESS')
+     client.standard.transitionState(txId, 'DELIVERED', proof)
 
 2. src/services/payment.ts:78
-   - client.events.on('escrowLinked', ...)
-   → client.events.watch('escrowLinked', ...)
-
-3. src/lib/monitor.ts:23
-   - client.events.on('paymentReleased', ...)
-   → client.events.watch('paymentReleased', ...)
+   - client.standard.linkEscrow(txId, { amount })
+   → client.standard.linkEscrow(txId)
 
 Apply migrations?
 Options: [Apply all] [Review each] [Skip - I'll do it manually]
@@ -131,6 +128,7 @@ const client = new ACTPClient({
 const client = await ACTPClient.create({
   mode: 'testnet',  // 'mock' | 'testnet' | 'mainnet'
   privateKey: '0x...',
+  requesterAddress: '0xYourAddress',
 });
 ```
 
@@ -189,13 +187,17 @@ try {
 
 #### 2.0 → 2.1 Migration
 
-**Event Listening:**
+**State Machine Enforcement:**
 ```typescript
+import { ethers } from 'ethers';
+
 // OLD (2.0)
-client.events.on(EventType.STATE_CHANGED, (event) => { ... });
+await client.standard.transitionState(txId, 'DELIVERED');
 
 // NEW (2.1)
-client.events.watch(EventType.STATE_CHANGED, (event) => { ... });
+await client.standard.transitionState(txId, 'IN_PROGRESS');
+const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
+await client.standard.transitionState(txId, 'DELIVERED', proof);
 ```
 
 **Batch Operations:**
@@ -218,9 +220,11 @@ import { ACTPClient, VERSION } from '@agirails/sdk';
 console.log('SDK Version:', VERSION);  // Should show 2.1.0
 
 // Test connection
-const client = await ACTPClient.create({ mode: 'mock' });
-console.log('Mock mode:', client.mode === 'mock');
-console.log('Connection OK:', client.isConnected);
+const client = await ACTPClient.create({
+  mode: 'mock',
+  requesterAddress: '0xYourAddress',
+});
+console.log('Mock mode:', client.getMode() === 'mock');
 ```
 
 ### Step 7: Post-Upgrade Checklist

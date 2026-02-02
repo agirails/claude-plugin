@@ -51,18 +51,18 @@ Example: 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
 ```typescript
 const status = await client.basic.checkStatus('0x...');
 console.log('State:', status.state);
-console.log('Can release:', status.canRelease);
+console.log('Can accept:', status.canAccept);
+console.log('Can complete:', status.canComplete);
 console.log('Can dispute:', status.canDispute);
-console.log('Can cancel:', status.canCancel);
 ```
 
 **Python:**
 ```python
 status = await client.basic.check_status("0x...")
 print(f"State: {status.state}")
-print(f"Can release: {status.can_release}")
+print(f"Can accept: {status.can_accept}")
+print(f"Can complete: {status.can_complete}")
 print(f"Can dispute: {status.can_dispute}")
-print(f"Can cancel: {status.can_cancel}")
 ```
 
 ### Step 4: Display Status Dashboard
@@ -81,8 +81,7 @@ print(f"Can cancel: {status.can_cancel}")
 │  Details:                                                   │
 │  Requester:    0xReq...123                                  │
 │  Provider:     0xPro...456                                  │
-│  Amount:       $100.00 USDC                                 │
-│  Fee:          $1.00 (1%)                                   │
+│  Amount:       100000000 (USDC wei)                         │
 │                                                             │
 │  Timing:                                                    │
 │  Created:      2025-12-27 10:30 UTC                         │
@@ -134,7 +133,7 @@ Transaction is complete. No further actions available.
 | COMMITTED | Funds locked | Wait for delivery, Cancel (conditions apply) |
 | IN_PROGRESS | Provider working | Wait for delivery |
 | DELIVERED | Work complete | Release, Dispute |
-| DISPUTED | Under dispute | Wait for resolution |
+| DISPUTED | Under dispute | Wait for resolution (admin/pauser) |
 | SETTLED | Payment complete | None (terminal) |
 | CANCELLED | Cancelled | None (terminal) |
 

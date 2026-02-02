@@ -59,123 +59,33 @@ Options:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Step 3: Generate Watch Code
+### Step 3: Generate Watch Code (Polling)
 
 **TypeScript:**
 ```typescript
 import { ACTPClient } from '@agirails/sdk';
 
+const TERMINAL = new Set(['SETTLED', 'CANCELLED']);
+
 async function watchTransaction(txId: string) {
   const client = await ACTPClient.create({
     mode: 'testnet', // or 'mainnet'
     privateKey: process.env.PRIVATE_KEY,
-  });
-
-  console.log(`Watching transaction: ${txId}\n`);
-
-  // Get initial status
-  let status = await client.basic.checkStatus(txId);
-  console.log(`Current state: ${status.state}`);
-
-  // Watch for changes
-  const unsubscribe = client.events.watchTransaction(txId, {
-    onStateChange: (event) => {
-      console.log(`\n🔄 State changed: ${event.fromState} → ${event.toState}`);
-      console.log(`   Time: ${new Date().toISOString()}`);
-
-      if (event.toState === 'DELIVERED') {
-        console.log(`   Delivery proof: ${event.metadata?.resultHash}`);
-        console.log(`   Dispute window starts now`);
-      }
-
-      if (event.toState === 'SETTLED') {
-        console.log(`   ✅ Transaction complete!`);
-        unsubscribe();
-      }
-    },
-    onDeadlineApproaching: (hoursRemaining) => {
-      console.log(`\n⚠️ Deadline in ${hoursRemaining} hours!`);
-    },
-    onDisputeWindowClosing: (hoursRemaining) => {
-      console.log(`\n⏰ Dispute window closes in ${hoursRemaining} hours`);
-    },
-  });
-
-  // Keep watching until terminal state
-  console.log('\nWatching for changes... (Press Ctrl+C to stop)');
-}
-
-// Usage
-watchTransaction('0xYourTransactionId').catch(console.error);
-```
-
-**Python:**
-```python
-import asyncio
-from agirails import ACTPClient
-
-async def watch_transaction(tx_id: str):
-    client = await ACTPClient.create(
-        mode="testnet",  # or 'mainnet'
-        private_key=os.environ["PRIVATE_KEY"],
-    )
-
-    print(f"Watching transaction: {tx_id}\n")
-
-    # Get initial status
-    status = await client.basic.check_status(tx_id)
-    print(f"Current state: {status.state}")
-
-    # Watch for changes
-    async def on_state_change(event):
-        print(f"\n🔄 State changed: {event.from_state} → {event.to_state}")
-        print(f"   Time: {datetime.now().isoformat()}")
-
-        if event.to_state == "DELIVERED":
-            print(f"   Delivery proof: {event.metadata.get('result_hash')}")
-            print("   Dispute window starts now")
-
-        if event.to_state == "SETTLED":
-            print("   ✅ Transaction complete!")
-            return True  # Stop watching
-
-    await client.events.watch_transaction(
-        tx_id,
-        on_state_change=on_state_change,
-    )
-
-# Usage
-asyncio.run(watch_transaction("0xYourTransactionId"))
-```
-
-### Step 4: Polling Alternative (Simple)
-
-For environments without WebSocket support:
-
-```typescript
-import { ACTPClient } from '@agirails/sdk';
-
-async function pollTransaction(txId: string) {
-  const client = await ACTPClient.create({
-    mode: 'testnet',
-    privateKey: process.env.PRIVATE_KEY,
+    requesterAddress: '0xYourAddress',
   });
 
   let lastState = '';
 
   while (true) {
     const status = await client.basic.checkStatus(txId);
-
     if (status.state !== lastState) {
-      console.log(`\n[${new Date().toISOString()}]`);
-      console.log(`State: ${status.state}`);
-
-      if (status.isTerminal) {
-        console.log('Transaction complete!');
-        break;
-      }
-
+      console.log(`[${new Date().toISOString()}] ${lastState} → ${status.state}`);
       lastState = status.state;
+    }
+
+    if (TERMINAL.has(status.state)) {
+      console.log('✅ Transaction complete');
+      break;
     }
 
     // Poll every 5 seconds
@@ -183,8 +93,46 @@ async function pollTransaction(txId: string) {
   }
 }
 
-pollTransaction('0xYourTransactionId').catch(console.error);
+watchTransaction('0xYourTransactionId').catch(console.error);
 ```
+
+**Python:**
+```python
+import asyncio
+import os
+from datetime import datetime
+from agirails import ACTPClient
+
+TERMINAL = {"SETTLED", "CANCELLED"}
+
+async def watch_transaction(tx_id: str):
+    client = await ACTPClient.create(
+        mode="testnet",  # or 'mainnet'
+        private_key=os.environ["PRIVATE_KEY"],
+        requester_address=os.environ["REQUESTER_ADDRESS"],
+    )
+
+    last_state = ""
+    while True:
+        status = await client.basic.check_status(tx_id)
+        if status.state != last_state:
+            print(f"[{datetime.now().isoformat()}] {last_state} → {status.state}")
+            last_state = status.state
+
+        if status.state in TERMINAL:
+            print("✅ Transaction complete")
+            break
+
+        await asyncio.sleep(5)
+
+asyncio.run(watch_transaction("0xYourTransactionId"))
+```
+
+### Step 4: Advanced (On-Chain Events)
+
+For real-time event streams, use your own indexer or subscribe directly to
+contract events (TransactionCreated, StateTransitioned, EscrowLinked) via ethers/web3.
+The SDK does not expose a high-level events API in TypeScript.
 
 ### Step 5: State-Specific Notifications
 
@@ -241,18 +189,17 @@ Available Actions:
 ## Integration with Notifications
 
 ```typescript
-// Example: Send notification when transaction completes
-client.events.watchTransaction(txId, {
-  onStateChange: async (event) => {
-    if (event.toState === 'SETTLED') {
-      // Send Slack notification
-      await fetch('https://hooks.slack.com/...', {
-        method: 'POST',
-        body: JSON.stringify({
-          text: `✅ Transaction ${txId} settled! Amount: ${event.amount} USDC`,
-        }),
-      });
-    }
-  },
-});
+// Example: Send notification when transaction completes (polling)
+const interval = setInterval(async () => {
+  const status = await client.basic.checkStatus(txId);
+  if (status.state === 'SETTLED') {
+    clearInterval(interval);
+    await fetch('https://hooks.slack.com/...', {
+      method: 'POST',
+      body: JSON.stringify({
+        text: `✅ Transaction ${txId} settled!`,
+      }),
+    });
+  }
+}, 5000);
 ```

@@ -61,6 +61,7 @@ const client = await ACTPClient.create({
 const client = await ACTPClient.create({
   mode: 'testnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS!,
   rpcUrl: 'https://sepolia.base.org', // Optional, has default
 });
 ```
@@ -71,6 +72,7 @@ const client = await ACTPClient.create({
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey: process.env.PRIVATE_KEY,
+  requesterAddress: process.env.REQUESTER_ADDRESS!,
   rpcUrl: process.env.BASE_RPC_URL,
 });
 ```
@@ -84,10 +86,9 @@ const result = await client.basic.pay({
   to: '0xProviderAddress',
   amount: '100.00',            // String, in USDC
   deadline: '+24h',            // Relative or absolute
-  serviceDescription: 'AI image generation',
 });
 
-// result: { txId, state, amount, fee, deadline }
+// result: { txId, state, amount, deadline }
 ```
 
 ### Check Status
@@ -95,9 +96,7 @@ const result = await client.basic.pay({
 ```typescript
 const status = await client.basic.checkStatus(txId);
 
-if (status.canRelease) {
-  await client.standard.releaseEscrow(txId);
-} else if (status.canDispute) {
+if (status.canDispute) {
   await client.standard.transitionState(txId, 'DISPUTED');
 }
 ```
@@ -105,8 +104,8 @@ if (status.canRelease) {
 ### Get Balance
 
 ```typescript
-const balance = await client.basic.getBalance();
-console.log(`Balance: ${balance} USDC`);
+const balance = await client.getBalance(client.getAddress());
+console.log(`Balance (wei): ${balance}`);
 ```
 
 ## Error Handling
@@ -140,22 +139,20 @@ try {
 
 ```typescript
 import type {
-  PayOptions,
-  PayResult,
-  StatusResult,
-  Transaction,
+  BasicPayParams,
+  BasicPayResult,
   TransactionState,
-  CreateOptions,
+  StandardTransactionParams,
 } from '@agirails/sdk';
 
 // Full type safety
-const options: PayOptions = {
+const options: BasicPayParams = {
   to: '0x...',
   amount: '100.00',
   deadline: '+24h',
 };
 
-const result: PayResult = await client.basic.pay(options);
+const result: BasicPayResult = await client.basic.pay(options);
 ```
 
 ## CLI Commands

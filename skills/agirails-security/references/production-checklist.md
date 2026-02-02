@@ -143,10 +143,8 @@ npm run test:coverage
 - [ ] Failed transactions alerted
 
 ```typescript
-client.standard.on('StateChanged', (event) => {
-  metrics.increment('state_change', { state: event.newState });
-  logger.info('State changed', event);
-});
+// Use on-chain events via ethers (TransactionCreated, StateTransitioned, EscrowLinked)
+// or your own indexer. The TS SDK does not expose a high-level events API.
 ```
 
 ### 4.2 Balance Monitoring
@@ -155,9 +153,12 @@ client.standard.on('StateChanged', (event) => {
 - [ ] Daily balance reports
 
 ```typescript
-// Check balance periodically
+import { ethers } from 'ethers';
+
+// Check balance periodically (mock mode returns wei)
 setInterval(async () => {
-  const balance = await client.basic.getBalance();
+  const balanceWei = await client.getBalance(client.getAddress());
+  const balance = ethers.formatUnits(balanceWei, 6);
   if (parseFloat(balance) < 100) {
     alert.send('Low USDC balance', { balance });
   }

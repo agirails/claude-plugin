@@ -65,11 +65,6 @@ Validate:
 Options: [1 hour] [6 hours] [24 hours (Recommended)] [7 days] [Custom]
 ```
 
-**Service Description (Optional):**
-```
-"Describe the service (optional, for your records):"
-```
-
 ### Step 3: Show Summary
 
 ```
@@ -103,13 +98,12 @@ async function createPayment() {
     to: '0xProviderAddress',
     amount: '100.00',
     deadline: '+24h',
-    serviceDescription: 'Service description here',
   });
 
   console.log('Payment created!');
   console.log('Transaction ID:', result.txId);
   console.log('State:', result.state);
-  console.log('Fee:', result.fee, 'USDC');
+  console.log('Amount:', result.amount);
 
   return result;
 }
@@ -132,13 +126,12 @@ async def create_payment():
         "to": "0xProviderAddress",
         "amount": 100.00,
         "deadline": "24h",
-        "service_description": "Service description here",
     })
 
     print("Payment created!")
     print(f"Transaction ID: {result.tx_id}")
     print(f"State: {result.state}")
-    print(f"Fee: {result.fee} USDC")
+    print(f"Amount: {result.amount}")
 
     return result
 

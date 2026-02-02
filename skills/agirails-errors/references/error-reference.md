@@ -73,6 +73,8 @@ ACTPError (base)
 ```typescript
 import { InsufficientFundsError } from '@agirails/sdk';
 
+import { ethers } from 'ethers';
+
 try {
   await client.basic.pay({ to, amount: 1000 });
 } catch (error) {
@@ -94,7 +96,7 @@ try:
 except InsufficientBalanceError as e:
     print(f"Required: {e.details['required']}")   # "1000000000"
     print(f"Available: {e.details['available']}") # "500000000"
-    await client.mint_tokens(address, "1000000000")
+    await client.mint_tokens(address, 1000)
 ```
 
 ### TransactionNotFoundError
@@ -139,7 +141,9 @@ import { InvalidStateTransitionError } from '@agirails/sdk';
 
 try {
   // Trying to deliver a SETTLED transaction
-  await client.standard.transitionState(txId, 'DELIVERED');
+  const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
+  await client.standard.transitionState(txId, 'IN_PROGRESS');
+  await client.standard.transitionState(txId, 'DELIVERED', proof);
 } catch (error) {
   if (error instanceof InvalidStateTransitionError) {
     console.log('From:', error.details.from);           // "SETTLED"

@@ -16,7 +16,7 @@ These are NOT design decisions. The protocol defines them. Use the SDK.
 
 | Aspect | Protocol Definition | SDK Method |
 |--------|---------------------|------------|
-| **Escrow** | USDC locked in EscrowVault until delivery | `client.escrow.*` |
+| **Escrow** | USDC locked in EscrowVault until delivery | `client.standard.linkEscrow()` / `releaseEscrow()` |
 | **State Machine** | 8 states, one-way transitions | `client.standard.transitionState()` |
 | **Proof of Delivery** | ABI-encoded disputeWindow proof + optional EAS attestation | `client.standard.transitionState(txId, 'DELIVERED', proof)` |
 | **Dispute Resolution** | 48h window, mediator resolves, penalties for false disputes | `client.standard.transitionState(txId, 'DISPUTED')` |
@@ -105,19 +105,17 @@ class ServiceAgent {
 
   async initialize() {
     this.client = await ACTPClient.create({
-      network: 'base-sepolia', // or 'base' for mainnet
+      mode: 'testnet', // or 'mainnet'
       privateKey: process.env.AGENT_PRIVATE_KEY!,
+      requesterAddress: process.env.AGENT_ADDRESS!,
     });
     this.wallet = await this.client.getAddress();
   }
 
   // 1. Listen for incoming transactions (YOU IMPLEMENT: how to receive)
   async startListening() {
-    this.client.events.on('TransactionCreated', async (tx) => {
-      if (tx.provider === this.wallet) {
-        await this.handleRequest(tx);
-      }
-    });
+    // Use your own event monitor (ethers) or polling to detect new txIds,
+    // then call handleRequest(tx) with your own transaction payload.
   }
 
   // 2. Handle request (YOU IMPLEMENT: pricing logic)
@@ -149,8 +147,7 @@ class ServiceAgent {
     const proof = abiCoder.encode(['uint256'], [disputeWindow]);
     await this.client.standard.transitionState(tx.id, 'DELIVERED', proof);
 
-    // SDK HANDLES: Auto-settlement after dispute window
-    // You just wait for SETTLED event
+    // Requester (or automation) releases after dispute window
   }
 
   // YOUR IMPLEMENTATION
@@ -189,23 +186,24 @@ class RequesterAgent {
 
   async initialize() {
     this.client = await ACTPClient.create({
-      network: 'base-sepolia',
+      mode: 'testnet',
       privateKey: process.env.AGENT_PRIVATE_KEY!,
+      requesterAddress: process.env.AGENT_ADDRESS!,
     });
   }
 
   // Request a service from another agent
   async requestService(providerAddress: string, task: any) {
     // 1. Create transaction (SDK handles state machine)
-    const txId = await this.client.kernel.createTransaction({
+    const txId = await this.client.standard.createTransaction({
       provider: providerAddress,
       amount: task.maxBudget,
-      deadline: Math.floor(Date.now() / 1000) + 86400, // 24h
-      metadata: task,
+      deadline: '+24h',
+      serviceDescription: task.description,
     });
 
     // 2. Link escrow (SDK handles fund locking)
-    await this.client.escrow.link(txId);
+    await this.client.standard.linkEscrow(txId);
 
     // 3. Wait for delivery (SDK handles state tracking)
     const result = await this.waitForDelivery(txId);
@@ -254,7 +252,7 @@ class RequesterAgent {
 
 - [ ] **Wallet**: Agent has private key for receiving payments
 - [ ] **SDK Initialized**: `ACTPClient.create()` with credentials
-- [ ] **Event Listener**: Watching for `TransactionCreated` events
+- [ ] **Event Monitor**: On-chain events or polling for new txIds
 - [ ] **Pricing Logic**: Function to calculate quote for requests
 - [ ] **Service Logic**: Function to perform the actual work
 - [ ] **Result Storage**: Upload mechanism (IPFS, Arweave, etc.)
@@ -265,8 +263,8 @@ class RequesterAgent {
 - [ ] **Wallet**: Agent has private key and USDC balance
 - [ ] **SDK Initialized**: `ACTPClient.create()` with credentials
 - [ ] **Provider Discovery**: Method to find suitable providers
-- [ ] **Transaction Creation**: `client.kernel.createTransaction()`
-- [ ] **Escrow Linking**: `client.escrow.link()` to lock funds
+- [ ] **Transaction Creation**: `client.standard.createTransaction()`
+- [ ] **Escrow Linking**: `client.standard.linkEscrow()` to lock funds
 - [ ] **Result Validation**: Logic to check delivered work
 - [ ] **Release/Dispute**: Decision to release or dispute
 

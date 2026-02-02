@@ -39,10 +39,10 @@ client.get_mode() -> Literal["mock", "testnet", "mainnet"]
 # Reset mock state (mock mode only)
 await client.reset() -> None
 
-# Mint test USDC (mock mode only)
+# Mint test USDC (mock mode only, amount is USDC)
 await client.mint_tokens(address: str, amount: str) -> None
 
-# Get USDC balance (mock mode only - returns wei units)
+# Get USDC balance (mock mode only - formatted string)
 await client.get_balance(address: str) -> str
 ```
 
@@ -64,14 +64,13 @@ result = await client.basic.pay({
     "to": "0xProvider...",
     "amount": 100.00,       # Float, int, or string
     "deadline": "+24h",     # "+1h", "+24h", "+7d", or Unix timestamp
-    "dispute_window": 172800,  # Seconds (default: 2 days)
 })
 
 # Result is a dataclass
 print(result.tx_id)      # "0x..."
 print(result.state)      # "COMMITTED"
-print(result.amount)     # "100.00 USDC"
-print(result.deadline)   # ISO 8601 string
+print(result.amount)     # "100000000" (USDC wei)
+print(result.deadline)   # Unix timestamp
 ```
 
 ### `client.basic.check_status(tx_id)`
@@ -107,7 +106,7 @@ tx_id = await client.standard.create_transaction({
     "amount": 100,              # User-friendly format
     "deadline": "+7d",          # Defaults to +24h
     "dispute_window": 172800,   # Defaults to 2 days
-    "service_description": "Optional description",
+    "description": "Optional description",
 })
 # Returns transaction ID, state is INITIATED
 ```
@@ -126,10 +125,12 @@ escrow_id = await client.standard.link_escrow("0x...")
 Transition to a new state.
 
 ```python
-from agirails import TransactionState
+from eth_abi import encode
 
-# Provider marks work as delivered
-await client.standard.transition_state(tx_id, "DELIVERED")
+# Provider marks work as delivered (IN_PROGRESS required)
+await client.standard.transition_state(tx_id, "IN_PROGRESS")
+proof = "0x" + encode(["uint256"], [172800]).hex()
+await client.standard.transition_state(tx_id, "DELIVERED", proof)
 
 # Valid transitions:
 # INITIATED → QUOTED, COMMITTED, CANCELLED
@@ -181,6 +182,7 @@ Direct access to the underlying runtime (IACTPRuntime).
 
 ```python
 runtime = client.runtime
+from eth_abi import encode
 
 # Create transaction with protocol-level params
 tx_id = await runtime.create_transaction({
@@ -195,7 +197,9 @@ tx_id = await runtime.create_transaction({
 tx = await runtime.get_transaction(tx_id)
 
 # State transitions
-await runtime.transition_state(tx_id, "DELIVERED")
+proof = "0x" + encode(["uint256"], [172800]).hex()
+await runtime.transition_state(tx_id, "IN_PROGRESS")
+await runtime.transition_state(tx_id, "DELIVERED", proof)
 
 # Escrow operations
 await runtime.link_escrow(tx_id, amount)

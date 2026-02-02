@@ -116,15 +116,15 @@ COMMITTED → CANCELLED (before deadline)
 |------|-----|--------|--------|
 | INITIATED | QUOTED | Provider | `transitionState()` |
 | INITIATED | COMMITTED | Requester | `linkEscrow()` |
-| INITIATED | CANCELLED | Requester | `cancel()` |
+| INITIATED | CANCELLED | Requester | `transitionState()` |
 | QUOTED | COMMITTED | Requester | `linkEscrow()` |
-| QUOTED | CANCELLED | Requester | `cancel()` |
+| QUOTED | CANCELLED | Requester | `transitionState()` |
 | COMMITTED | IN_PROGRESS | Provider | `transitionState()` |
-| COMMITTED | CANCELLED | Either | `cancel()` |
+| COMMITTED | CANCELLED | Either | `transitionState()` |
 | IN_PROGRESS | DELIVERED | Provider | `transitionState()` |
 | DELIVERED | SETTLED | Requester/Auto | `releaseEscrow()` |
 | DELIVERED | DISPUTED | Either | `transitionState()` |
-| DISPUTED | SETTLED | Mediator | `resolveDispute()` |
+| DISPUTED | SETTLED | Admin/Pauser | `transitionState()` |
 | DISPUTED | CANCELLED | Admin/Pauser | `transitionState()` |
 
 ### Interactive Mode
@@ -148,7 +148,8 @@ Output:
 │  Entry Conditions:                                              │
 │  - Previous state: IN_PROGRESS (required)                       │
 │  - Caller: Provider only                                        │
-│  - Optional: Delivery proof (hash + URL)                        │
+│  - Proof: ABI-encoded dispute window (uint256 seconds)          │
+│    (If omitted, default 48h is used)                             │
 │                                                                 │
 │  Available Actions:                                             │
 │  - Requester: releaseEscrow() → SETTLED                         │
