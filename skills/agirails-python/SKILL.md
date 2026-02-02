@@ -92,7 +92,6 @@ result = await client.basic.pay({
     "to": "0xProviderAddress",
     "amount": 100.00,              # Float or string
     "deadline": "24h",             # Relative or absolute
-    "description": "AI image generation",
 })
 
 # result: PayResult(tx_id, state, amount, deadline)
