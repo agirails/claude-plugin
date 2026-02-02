@@ -92,13 +92,13 @@ Escrow is linked and funds are locked. Work can begin.
 Provider is actively working on the service. Required state before transitioning to DELIVERED.
 
 **Entry:** `transitionState(IN_PROGRESS)` from COMMITTED
-**Exit:** `transitionState(DELIVERED)` → DELIVERED
+**Exit:** `transitionState(DELIVERED)` → DELIVERED, or `transitionState(CANCELLED)` → CANCELLED (provider only)
 
 **Properties:**
 - Signals active work
 - Useful for long-running tasks
-- No cancellation from this state
-- Must progress to DELIVERED
+- Provider can cancel if unable to complete
+- Must progress to DELIVERED or CANCELLED
 
 ### DELIVERED (4)
 Provider has completed work and submitted delivery proof.
@@ -159,10 +159,12 @@ Transaction was cancelled before completion. Terminal state.
 | COMMITTED | IN_PROGRESS | Provider | `transitionState()` | - |
 | COMMITTED | CANCELLED | Either | `cancel()` | Before deadline, conditions apply |
 | IN_PROGRESS | DELIVERED | Provider | `transitionState()` | - |
+| IN_PROGRESS | CANCELLED | Provider | `transitionState()` | Provider abandons work |
 | DELIVERED | SETTLED | Requester | `releaseEscrow()` | - |
 | DELIVERED | SETTLED | Auto | After dispute window | Window expired |
 | DELIVERED | DISPUTED | Either | `raiseDispute()` | Within dispute window |
 | DISPUTED | SETTLED | Mediator | `resolveDispute()` | Resolution provided |
+| DISPUTED | CANCELLED | Admin/Pauser | `transitionState()` | Emergency only |
 
 ## Timing Constraints
 

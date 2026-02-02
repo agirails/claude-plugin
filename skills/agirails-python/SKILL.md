@@ -102,9 +102,9 @@ result = await client.basic.pay({
 status = await client.basic.check_status(tx_id)
 
 if status.can_release:
-    await client.basic.release(tx_id)
+    await client.standard.release_escrow(tx_id)
 elif status.can_dispute:
-    await client.basic.dispute(tx_id, reason="Not delivered")
+    await client.standard.transition_state(tx_id, "DISPUTED")
 ```
 
 ### Get Balance

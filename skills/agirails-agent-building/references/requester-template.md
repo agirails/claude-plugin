@@ -125,7 +125,7 @@ export class RequesterAgent {
       console.log(`Quote accepted, waiting for delivery`);
     } else {
       // SDK HANDLES: Cancel if quote too high
-      await this.client.basic.cancel(tx.id);
+      await this.client.standard.transitionState(tx.id, 'CANCELLED');
       console.log(`Quote rejected, transaction cancelled`);
       this.pendingRequests.delete(tx.id);
     }
@@ -158,10 +158,7 @@ export class RequesterAgent {
     const expectedHash = ethers.keccak256(ethers.toUtf8Bytes(result));
     if (expectedHash !== tx.resultHash) {
       console.log(`Hash mismatch! Raising dispute.`);
-      await this.client.standard.raiseDispute(tx.id, {
-        reason: 'Result hash does not match delivered content',
-        evidence: { expected: expectedHash, actual: tx.resultHash },
-      });
+      await this.client.standard.transitionState(tx.id, 'DISPUTED');
       return;
     }
 
@@ -170,14 +167,11 @@ export class RequesterAgent {
 
     if (validation.passed) {
       // SDK HANDLES: Release payment to provider
-      await this.client.basic.release(tx.id);
+      await this.client.standard.releaseEscrow(tx.id);
       console.log(`Payment released for ${tx.id}`);
     } else {
-      // SDK HANDLES: Dispute flow
-      await this.client.standard.raiseDispute(tx.id, {
-        reason: validation.reason,
-        evidence: validation.evidence,
-      });
+      // SDK HANDLES: Dispute flow (state transition)
+      await this.client.standard.transitionState(tx.id, 'DISPUTED');
       console.log(`Dispute raised for ${tx.id}: ${validation.reason}`);
     }
   }
@@ -258,7 +252,7 @@ export class RequesterAgent {
   async cancelRequest(txId: string): Promise<void> {
     // SDK HANDLES: Cancel and refund
     // Only works before DELIVERED state
-    await this.client.basic.cancel(txId);
+    await this.client.standard.transitionState(txId, 'CANCELLED');
 
     console.log(`Transaction cancelled: ${txId}`);
     console.log(`Funds refunded to wallet`);
@@ -377,13 +371,10 @@ class RequesterAgent:
 
         if validation["passed"]:
             # SDK HANDLES: Payment release
-            await self.client.basic.release(tx.id)
+            await self.client.standard.release_escrow(tx.id)
         else:
-            # SDK HANDLES: Dispute flow
-            await self.client.standard.raise_dispute(
-                tx.id,
-                reason=validation["reason"]
-            )
+            # SDK HANDLES: Dispute flow (state transition)
+            await self.client.standard.transition_state(tx.id, "DISPUTED")
 
     async def fetch_result(self, url: str) -> str:
         async with aiohttp.ClientSession() as session:

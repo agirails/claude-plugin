@@ -157,7 +157,7 @@ if (!canTransition) {
 │  2. Cancel transaction (you'll get full refund)                 │
 │                                                                 │
 │  Code to Cancel:                                                │
-│  await client.basic.cancel('0x...');                            │
+│  await client.standard.transitionState('0x...', 'CANCELLED');   │
 │                                                                 │
 │  Note: After cancellation, funds return to your wallet          │
 │  within 1-2 blocks (~4 seconds on Base).                        │
@@ -178,15 +178,15 @@ switch (status.state) {
   case 'COMMITTED':
     // Wait or cancel
     if (status.isDeadlinePassed) {
-      await client.basic.cancel(txId);
+      await client.standard.transitionState(txId, 'CANCELLED');
     }
     break;
   case 'DELIVERED':
     // Release or dispute
     if (status.isDeliveryAcceptable) {
-      await client.basic.release(txId);
+      await client.standard.releaseEscrow(txId);
     } else {
-      await client.basic.dispute(txId, { reason: 'Issue description' });
+      await client.standard.transitionState(txId, 'DISPUTED');
     }
     break;
   case 'DISPUTED':

@@ -73,42 +73,22 @@ interface StatusResult {
 
 const status = await client.basic.checkStatus('0x...');
 if (status.canRelease) {
-  await client.basic.release(status.txId);
+  // Use Standard API for state transitions and escrow release
+  await client.standard.releaseEscrow(status.txId);
 }
 ```
 
-### `client.basic.release(txId)`
-
-Release escrowed funds to provider.
+**Note:** For state transitions (release, cancel, dispute), use the Standard API:
 
 ```typescript
-await client.basic.release('0x...');
-// Throws if not authorized or wrong state
-```
+// Release payment to provider (after DELIVERED)
+await client.standard.releaseEscrow(txId);
 
-### `client.basic.dispute(txId, options)`
+// Raise a dispute (after DELIVERED, within dispute window)
+await client.standard.transitionState(txId, 'DISPUTED');
 
-Raise a dispute on a delivered transaction.
-
-```typescript
-interface DisputeOptions {
-  reason: string;       // Required
-  evidenceUrl?: string; // Optional IPFS/URL
-}
-
-await client.basic.dispute('0x...', {
-  reason: 'Work not as specified',
-  evidenceUrl: 'ipfs://Qm...',
-});
-```
-
-### `client.basic.cancel(txId)`
-
-Cancel a transaction (before DELIVERED state).
-
-```typescript
-await client.basic.cancel('0x...');
-// Refunds escrowed amount to requester
+// Cancel transaction (before DELIVERED)
+await client.standard.transitionState(txId, 'CANCELLED');
 ```
 
 ### `client.basic.getBalance(address?)`
@@ -255,16 +235,13 @@ Release funds to provider.
 await client.standard.releaseEscrow('0x...');
 ```
 
-### `client.standard.raiseDispute(txId, reason, evidenceHash?)`
+### Raising a Dispute
 
-Raise dispute with evidence.
+Raise dispute via state transition.
 
 ```typescript
-await client.standard.raiseDispute(
-  '0x...',
-  'Service not delivered as specified',
-  '0x...' // Optional evidence hash
-);
+// Transition to DISPUTED state (only valid from DELIVERED)
+await client.standard.transitionState('0x...', 'DISPUTED');
 ```
 
 ---

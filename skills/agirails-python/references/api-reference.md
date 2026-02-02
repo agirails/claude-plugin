@@ -135,9 +135,9 @@ await client.standard.transition_state(tx_id, "DELIVERED")
 # INITIATED → QUOTED, COMMITTED, CANCELLED
 # QUOTED → COMMITTED, CANCELLED
 # COMMITTED → IN_PROGRESS, CANCELLED
-# IN_PROGRESS → DELIVERED, CANCELLED
+# IN_PROGRESS → DELIVERED, CANCELLED (provider only)
 # DELIVERED → SETTLED, DISPUTED
-# DISPUTED → SETTLED
+# DISPUTED → SETTLED, CANCELLED (admin/pauser)
 ```
 
 ### `client.standard.release_escrow(escrow_id, attestation_params=None)`

@@ -198,6 +198,7 @@ Show what to expect for each state:
 | DELIVERED | SETTLED | Requester releases or auto | Up to dispute window |
 | DELIVERED | DISPUTED | Either party disputes | During dispute window |
 | DISPUTED | SETTLED | Mediator resolves | 24-72 hours |
+| DISPUTED | CANCELLED | Admin/pauser cancels | Emergency only |
 
 ### Step 6: Dashboard View (Extended)
 
@@ -232,8 +233,8 @@ For long-running transactions:
 └─────────────────────────────────────────────────────────────────┘
 
 Available Actions:
-- Release payment: await client.basic.release(txId);
-- Raise dispute:   await client.basic.dispute(txId, {...});
+- Release payment: await client.standard.releaseEscrow(txId);
+- Raise dispute:   await client.standard.transitionState(txId, 'DISPUTED');
 - View details:    /agirails:status 0xabc123...
 ```
 

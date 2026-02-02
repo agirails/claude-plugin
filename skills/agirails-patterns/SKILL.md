@@ -59,14 +59,14 @@ const result = await client.basic.pay({
 const status = await client.basic.checkStatus(txId);
 // Returns: { state, canRelease, canDispute, canCancel, ... }
 
-// Get your balance
-const balance = await client.basic.getBalance();
+// Release payment to provider (after DELIVERED)
+await client.standard.releaseEscrow(txId);
 
-// Release payment to provider
-await client.basic.release(txId);
+// Raise a dispute (after DELIVERED, within dispute window)
+await client.standard.transitionState(txId, 'DISPUTED');
 
-// Raise a dispute
-await client.basic.dispute(txId, { reason: 'Work not delivered' });
+// Cancel transaction (before DELIVERED)
+await client.standard.transitionState(txId, 'CANCELLED');
 ```
 
 **What Basic API handles automatically:**

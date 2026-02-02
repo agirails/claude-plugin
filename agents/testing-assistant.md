@@ -61,6 +61,7 @@ Help developers write comprehensive tests that ensure their AGIRAILS integration
 // __tests__/actp.test.ts
 import { ACTPClient } from '@agirails/sdk';
 import { InsufficientBalanceError, InvalidStateError } from '@agirails/sdk';
+import { ethers } from 'ethers';
 
 describe('ACTP Integration', () => {
   let client: ACTPClient;
@@ -136,17 +137,20 @@ describe('Happy Path', () => {
     expect(result.state).toBe('COMMITTED');
     expect(result.fee).toBe(1.00); // 1% of $100
 
-    // 2. Provider starts work and delivers
+    // 2. Provider starts work (IN_PROGRESS required before DELIVERED)
     await client.standard.transitionState(result.txId, 'IN_PROGRESS');
-    await client.standard.transitionState(result.txId, 'DELIVERED', {
-      resultHash: '0x' + 'a'.repeat(64),
-    });
+
+    // 3. Provider delivers with dispute window proof (ABI-encoded)
+    const disputeWindow = 172800; // 2 days in seconds
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const proof = abiCoder.encode(['uint256'], [disputeWindow]);
+    await client.standard.transitionState(result.txId, 'DELIVERED', proof);
 
     const afterDelivery = await client.basic.checkStatus(result.txId);
     expect(afterDelivery.state).toBe('DELIVERED');
 
-    // 3. Requester releases
-    await client.basic.release(result.txId);
+    // 4. Requester releases
+    await client.standard.releaseEscrow(result.txId);
 
     const final = await client.basic.checkStatus(result.txId);
     expect(final.state).toBe('SETTLED');
@@ -201,7 +205,7 @@ describe('Error Handling', () => {
 
     // Try to skip DELIVERED and go straight to SETTLED
     await expect(
-      client.basic.release(result.txId)
+      client.standard.releaseEscrow(result.txId)
     ).rejects.toThrow(InvalidStateError);
   });
 
@@ -316,7 +320,12 @@ async function setupTransactionInState(client: ACTPClient, targetState: string) 
     if (state === 'COMMITTED') {
       await client.standard.linkEscrow(tx.txId);
     } else if (state === 'SETTLED') {
-      await client.basic.release(tx.txId);
+      await client.standard.releaseEscrow(tx.txId);
+    } else if (state === 'DELIVERED') {
+      // DELIVERED requires dispute window proof
+      const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+      const proof = abiCoder.encode(['uint256'], [172800]);
+      await client.standard.transitionState(tx.txId, state, proof);
     } else {
       await client.standard.transitionState(tx.txId, state);
     }
@@ -386,10 +395,12 @@ describe('Edge Cases', () => {
       deadline: '+24h',
     });
 
-    // Rapid transitions
+    // Rapid transitions (IN_PROGRESS required before DELIVERED)
     await client.standard.transitionState(tx.txId, 'IN_PROGRESS');
-    await client.standard.transitionState(tx.txId, 'DELIVERED');
-    await client.basic.release(tx.txId);
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const proof = abiCoder.encode(['uint256'], [172800]);
+    await client.standard.transitionState(tx.txId, 'DELIVERED', proof);
+    await client.standard.releaseEscrow(tx.txId);
 
     const status = await client.basic.checkStatus(tx.txId);
     expect(status.state).toBe('SETTLED');
@@ -409,13 +420,12 @@ describe('Dispute Flow', () => {
       deadline: '+24h',
     });
     await client.standard.transitionState(tx.txId, 'IN_PROGRESS');
-    await client.standard.transitionState(tx.txId, 'DELIVERED');
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const proof = abiCoder.encode(['uint256'], [172800]);
+    await client.standard.transitionState(tx.txId, 'DELIVERED', proof);
 
-    // Raise dispute
-    await client.standard.raiseDispute(tx.txId, {
-      reason: 'QUALITY_ISSUE',
-      description: 'Result did not meet specifications',
-    });
+    // Raise dispute (state transition, not separate method)
+    await client.standard.transitionState(tx.txId, 'DISPUTED');
 
     const disputed = await client.basic.checkStatus(tx.txId);
     expect(disputed.state).toBe('DISPUTED');
@@ -438,11 +448,13 @@ describe('Dispute Flow', () => {
       deadline: '+24h',
     });
     await client.standard.transitionState(tx.txId, 'IN_PROGRESS');
-    await client.standard.transitionState(tx.txId, 'DELIVERED');
-    await client.basic.release(tx.txId);
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const proof = abiCoder.encode(['uint256'], [172800]);
+    await client.standard.transitionState(tx.txId, 'DELIVERED', proof);
+    await client.standard.releaseEscrow(tx.txId);
 
     await expect(
-      client.standard.raiseDispute(tx.txId, { reason: 'QUALITY_ISSUE' })
+      client.standard.transitionState(tx.txId, 'DISPUTED')
     ).rejects.toThrow('Cannot dispute settled transaction');
   });
 });

@@ -161,21 +161,23 @@ export class ProviderAgent {
       startedAt: Date.now(),
     });
 
-    // SDK HANDLES: Transition to IN_PROGRESS (optional but recommended)
+    // SDK HANDLES: Transition to IN_PROGRESS (required before DELIVERED)
     await this.client.standard.transitionState(tx.id, 'IN_PROGRESS');
 
     try {
       // YOUR LOGIC: Perform the service
       const result = await this.performService(tx.metadata);
 
-      // YOUR LOGIC: Store result
-      const { resultHash, resultUrl } = await this.storeResult(result);
+      // Get transaction for dispute window
+      const txData = await this.client.standard.getTransaction(tx.id);
+      const disputeWindow = txData?.disputeWindow || 172800; // default 2 days
+
+      // Encode dispute window as proof (ABI-encoded uint256)
+      const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+      const proof = abiCoder.encode(['uint256'], [disputeWindow]);
 
       // SDK HANDLES: Transition to DELIVERED with proof
-      await this.client.standard.deliver(tx.id, {
-        resultHash,
-        resultUrl,
-      });
+      await this.client.standard.transitionState(tx.id, 'DELIVERED', proof);
 
       console.log(`Delivered: ${tx.id}`);
 
@@ -361,19 +363,21 @@ class ProviderAgent:
         )
 
     async def execute_job(self, tx):
-        # SDK HANDLES: State transition
+        # SDK HANDLES: State transition (IN_PROGRESS required before DELIVERED)
         await self.client.standard.transition_state(tx.id, "IN_PROGRESS")
 
         # YOUR LOGIC: Do the work
         result = await self.perform_service(tx.metadata)
-        result_hash, result_url = await self.store_result(result)
 
-        # SDK HANDLES: Delivery with proof
-        await self.client.standard.deliver(
-            tx.id,
-            result_hash=result_hash,
-            result_url=result_url
-        )
+        # Get dispute window for proof encoding
+        dispute_window = tx.dispute_window or 172800  # default 2 days
+
+        # Encode dispute window as proof (ABI-encoded uint256)
+        from eth_abi import encode
+        proof = "0x" + encode(["uint256"], [dispute_window]).hex()
+
+        # SDK HANDLES: Delivery with dispute window proof
+        await self.client.standard.transition_state(tx.id, "DELIVERED", proof)
 
     async def upload_to_ipfs(self, content: str) -> str:
         raise NotImplementedError("Implement IPFS upload")

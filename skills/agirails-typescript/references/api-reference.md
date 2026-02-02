@@ -164,9 +164,9 @@ await client.standard.transitionState(txId, 'DELIVERED');
 // INITIATED → QUOTED, COMMITTED, CANCELLED
 // QUOTED → COMMITTED, CANCELLED
 // COMMITTED → IN_PROGRESS, CANCELLED
-// IN_PROGRESS → DELIVERED
+// IN_PROGRESS → DELIVERED, CANCELLED (provider only)
 // DELIVERED → SETTLED, DISPUTED
-// DISPUTED → SETTLED
+// DISPUTED → SETTLED, CANCELLED (admin/pauser)
 ```
 
 ### `client.standard.releaseEscrow(escrowId, attestationParams?)`
@@ -452,7 +452,7 @@ type TransactionState =
   | 'INITIATED'    // 0 - Created, no escrow
   | 'QUOTED'       // 1 - Provider quoted (optional)
   | 'COMMITTED'    // 2 - Escrow linked, work starts
-  | 'IN_PROGRESS'  // 3 - Provider working (optional)
+  | 'IN_PROGRESS'  // 3 - Provider working (required before DELIVERED)
   | 'DELIVERED'    // 4 - Work complete
   | 'SETTLED'      // 5 - Payment released (terminal)
   | 'DISPUTED'     // 6 - Under dispute

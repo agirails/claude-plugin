@@ -96,9 +96,9 @@ const result = await client.basic.pay({
 const status = await client.basic.checkStatus(txId);
 
 if (status.canRelease) {
-  await client.basic.release(txId);
+  await client.standard.releaseEscrow(txId);
 } else if (status.canDispute) {
-  await client.basic.dispute(txId, { reason: 'Not delivered' });
+  await client.standard.transitionState(txId, 'DISPUTED');
 }
 ```
 

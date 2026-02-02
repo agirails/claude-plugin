@@ -107,7 +107,7 @@ async function main() {
   console.log('✓ Provider delivered\n');
 
   // 5. Release payment
-  await client.basic.release(result.txId);
+  await client.standard.releaseEscrow(result.txId);
   console.log('✓ Payment released to provider\n');
 
   // 6. Verify final state
@@ -184,7 +184,7 @@ async def main():
     print("✓ Provider delivered\n")
 
     # 5. Release payment
-    await client.basic.release(result.tx_id)
+    await client.standard.release_escrow(result.tx_id)
     print("✓ Payment released to provider\n")
 
     # 6. Verify final state
@@ -341,15 +341,8 @@ async function main() {
 
   console.log('Transaction delivered, now raising dispute...\n');
 
-  // DISPUTE: Requester is not satisfied
-  await client.standard.raiseDispute(tx.txId, {
-    reason: DisputeReason.QUALITY_ISSUE,
-    description: 'Delivered result does not meet specifications',
-    evidence: [
-      { type: 'text', content: 'Original spec: 99% accuracy' },
-      { type: 'text', content: 'Delivered: 75% accuracy' },
-    ],
-  });
+  // DISPUTE: Requester is not satisfied (state transition)
+  await client.standard.transitionState(tx.txId, 'DISPUTED');
 
   console.log('Dispute raised!');
   const disputed = await client.basic.checkStatus(tx.txId);

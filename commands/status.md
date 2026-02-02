@@ -112,10 +112,10 @@ Available Actions:
 - Raise dispute if unsatisfied
 
 Code to release:
-  await client.basic.release('0x...');
+  await client.standard.releaseEscrow('0x...');
 
 Code to dispute:
-  await client.basic.dispute('0x...', { reason: 'Reason here' });
+  await client.standard.transitionState('0x...', 'DISPUTED');
 ```
 
 **If SETTLED or CANCELLED:**

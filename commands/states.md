@@ -125,6 +125,7 @@ COMMITTED → CANCELLED (before deadline)
 | DELIVERED | SETTLED | Requester/Auto | `releaseEscrow()` |
 | DELIVERED | DISPUTED | Either | `raiseDispute()` |
 | DISPUTED | SETTLED | Mediator | `resolveDispute()` |
+| DISPUTED | CANCELLED | Admin/Pauser | `transitionState()` |
 
 ### Interactive Mode
 
@@ -159,10 +160,9 @@ Output:
 │  - If no action, auto-settles after window                      │
 │                                                                 │
 │  Code Example (Provider delivering):                            │
-│  await client.standard.transitionState(txId, 'DELIVERED', {     │
-│    resultHash: '0x...',                                         │
-│    resultUrl: 'ipfs://...',                                     │
-│  });                                                            │
+│  const abiCoder = ethers.AbiCoder.defaultAbiCoder();            │
+│  const proof = abiCoder.encode(['uint256'], [disputeWindow]);   │
+│  await client.standard.transitionState(txId, 'DELIVERED', proof);│
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```

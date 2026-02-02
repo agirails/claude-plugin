@@ -114,7 +114,7 @@ interface InvalidStateTransitionError extends StateError {
 
 try {
   // Try to release before delivered
-  await client.basic.release('0x...');
+  await client.standard.releaseEscrow('0x...');
 } catch (error) {
   if (error instanceof InvalidStateTransitionError) {
     console.log(`Cannot transition from ${error.currentState} to ${error.targetState}`);
@@ -163,7 +163,7 @@ interface NotAuthorizedError extends AuthorizationError {
 
 try {
   // Provider tries to release (only requester can)
-  await client.basic.release('0x...');
+  await client.standard.releaseEscrow('0x...');
 } catch (error) {
   if (error instanceof NotAuthorizedError) {
     console.log(`${error.caller} cannot ${error.action}`);

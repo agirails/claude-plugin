@@ -18,14 +18,14 @@ These are NOT design decisions. The protocol defines them. Use the SDK.
 |--------|---------------------|------------|
 | **Escrow** | USDC locked in EscrowVault until delivery | `client.escrow.*` |
 | **State Machine** | 8 states, one-way transitions | `client.standard.transitionState()` |
-| **Proof of Delivery** | `resultHash` + `resultUrl` + optional EAS attestation | `client.standard.deliver()` |
-| **Dispute Resolution** | 48h window, mediator resolves, penalties for false disputes | `client.standard.raiseDispute()` |
+| **Proof of Delivery** | ABI-encoded disputeWindow proof + optional EAS attestation | `client.standard.transitionState(txId, 'DELIVERED', proof)` |
+| **Dispute Resolution** | 48h window, mediator resolves, penalties for false disputes | `client.standard.transitionState(txId, 'DISPUTED')` |
 | **Fee Collection** | 1% with $0.05 minimum, auto-deducted | Automatic |
 | **Auto-Settlement** | After dispute window, funds auto-release to provider | Automatic |
 | **Access Control** | Only requester/provider can call specific functions | Enforced by contract |
 | **Deadline Enforcement** | Transaction expires if not delivered by deadline | Enforced by contract |
 
-**When user asks "how do I prove delivery?" → Answer: Use `resultHash` + `resultUrl`. That's it.**
+**When user asks "how do I prove delivery?" → Answer: Use ABI-encoded proof with disputeWindow, optionally with EAS attestation UID.**
 
 **When user asks "what if there's a dispute?" → Answer: Protocol handles it. 48h window, mediator resolves.**
 
@@ -140,11 +140,14 @@ class ServiceAgent {
     const resultUrl = await this.uploadToIPFS(result);
     const resultHash = this.hashContent(result);
 
-    // SDK HANDLES: State transition to DELIVERED with proof
-    await this.client.standard.deliver(tx.id, {
-      resultHash,
-      resultUrl,
-    });
+    // SDK HANDLES: Transition to IN_PROGRESS (required before DELIVERED)
+    await this.client.standard.transitionState(tx.id, 'IN_PROGRESS');
+
+    // SDK HANDLES: State transition to DELIVERED with dispute window proof
+    const disputeWindow = 172800; // 2 days in seconds
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const proof = abiCoder.encode(['uint256'], [disputeWindow]);
+    await this.client.standard.transitionState(tx.id, 'DELIVERED', proof);
 
     // SDK HANDLES: Auto-settlement after dispute window
     // You just wait for SETTLED event
@@ -209,13 +212,11 @@ class RequesterAgent {
 
     // 4. Validate and release (YOU IMPLEMENT: quality check)
     if (this.validateResult(result)) {
-      await this.client.basic.release(txId);
+      await this.client.standard.releaseEscrow(txId);
       return result;
     } else {
-      // SDK HANDLES: Dispute flow
-      await this.client.standard.raiseDispute(txId, {
-        reason: 'Result does not meet requirements',
-      });
+      // SDK HANDLES: Dispute flow (state transition)
+      await this.client.standard.transitionState(txId, 'DISPUTED');
     }
   }
 
@@ -257,7 +258,7 @@ class RequesterAgent {
 - [ ] **Pricing Logic**: Function to calculate quote for requests
 - [ ] **Service Logic**: Function to perform the actual work
 - [ ] **Result Storage**: Upload mechanism (IPFS, Arweave, etc.)
-- [ ] **Delivery Call**: `client.standard.deliver()` with hash + URL
+- [ ] **State Transitions**: `client.standard.transitionState()` for IN_PROGRESS → DELIVERED with proof
 
 ### Requester Agent Checklist
 
@@ -273,11 +274,11 @@ class RequesterAgent {
 
 ### Q: How do I handle payment failures?
 
-**A:** The protocol handles this. If provider doesn't deliver before deadline, requester can cancel and get refund. Use `client.basic.cancel()`.
+**A:** The protocol handles this. If provider doesn't deliver before deadline, requester can cancel and get refund. Use `client.standard.transitionState(txId, 'CANCELLED')`.
 
 ### Q: What if the provider delivers bad work?
 
-**A:** Raise a dispute within the dispute window (default 48h). The mediator will resolve and split funds accordingly. Use `client.standard.raiseDispute()`.
+**A:** Raise a dispute within the dispute window (default 48h). The mediator will resolve and split funds accordingly. Use `client.standard.transitionState(txId, 'DISPUTED')`.
 
 ### Q: How do I set my fee?
 
@@ -285,7 +286,7 @@ class RequesterAgent {
 
 ### Q: Do I need to implement escrow?
 
-**A:** No. The SDK handles escrow completely. Just call `linkEscrow()` and funds are locked. Call `deliver()` and funds are released after dispute window.
+**A:** No. The SDK handles escrow completely. Just call `linkEscrow()` and funds are locked. Transition to DELIVERED and funds are released after dispute window.
 
 ### Q: How do I prove I did the work?
 
