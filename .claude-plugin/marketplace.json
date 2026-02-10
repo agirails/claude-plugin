@@ -5,15 +5,15 @@
     "url": "https://agirails.io/contact"
   },
   "metadata": {
-    "description": "Official AGIRAILS plugins for AI agent payments",
-    "version": "1.0.0"
+    "description": "AGIRAILS SDK integration for AI agent payments — ACTP escrow, x402 instant payments, adapter routing, ERC-8004 identity. Zero to first transaction in 5 minutes.",
+    "version": "3.0.0"
   },
   "plugins": [
     {
       "name": "agirails",
       "source": "./",
-      "description": "AGIRAILS SDK integration for AI agent payments. Zero to first transaction in 15 minutes.",
-      "version": "1.0.0",
+      "description": "AGIRAILS SDK integration for AI agent payments — ACTP escrow, x402 instant payments, adapter routing, ERC-8004 identity. Zero to first transaction in 5 minutes.",
+      "version": "3.0.0",
       "author": {
         "name": "AGIRAILS Team",
         "url": "https://agirails.io/contact"
@@ -21,7 +21,19 @@
       "homepage": "https://docs.agirails.io",
       "repository": "https://github.com/agirails/claude-plugin",
       "license": "Apache-2.0",
-      "keywords": ["ai-agents", "payments", "escrow", "USDC", "Web3", "blockchain", "ACTP"]
+      "keywords": [
+        "ai-agents",
+        "payments",
+        "escrow",
+        "USDC",
+        "Web3",
+        "blockchain",
+        "ACTP",
+        "x402",
+        "ERC-8004",
+        "identity",
+        "adapter-routing"
+      ]
     }
   ]
 }

@@ -6,6 +6,18 @@ description: This skill provides security guidance for AGIRAILS integrations whe
 
 Security is critical when handling payments. Follow these guidelines to protect user funds and maintain trust.
 
+## Key Resolution Order
+
+The SDK resolves signing keys in this priority:
+
+```
+1. ACTP_PRIVATE_KEY env var (explicit key, for CI/testing)
+2. .actp/keystore.json + ACTP_KEY_PASSWORD (encrypted at rest, recommended)
+3. wallet: 'auto' (Smart Wallet + micro-airdrop gas, zero-config)
+```
+
+The address is always derived from the key automatically -- never specify `requesterAddress` manually.
+
 ## Critical Security Rules
 
 ### 1. Never Hardcode Private Keys
@@ -15,15 +27,11 @@ Security is critical when handling payments. Follow these guidelines to protect 
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey: '0x1234567890abcdef...', // CRITICAL BUG
-  requesterAddress: '0xYourAddress',
 });
 
-// CORRECT - Use environment variables
-const client = await ACTPClient.create({
-  mode: 'mainnet',
-  privateKey: process.env.PRIVATE_KEY,
-  requesterAddress: process.env.REQUESTER_ADDRESS,
-});
+// CORRECT - SDK auto-detects from keystore
+const client = await ACTPClient.create({ mode: 'mainnet' });
+// Key loaded from .actp/keystore.json + ACTP_KEY_PASSWORD env var
 ```
 
 ### 2. Never Log Sensitive Data
@@ -41,13 +49,11 @@ logger.debug({ address, mode });
 ### 3. Always Use .gitignore
 
 ```gitignore
-# Required entries
+# AGIRAILS
+.actp/
 .env
 .env.local
-.env.production
-.actp/
-*.pem
-*.key
+.env.*.local
 ```
 
 ### 4. Validate All Inputs
@@ -73,6 +79,62 @@ async function pay(to: string, amount: string) {
 }
 ```
 
+## Key Management
+
+### Development (Mock Mode)
+
+No key needed -- mock mode generates ephemeral keys:
+
+```typescript
+const client = await ACTPClient.create({ mode: 'mock' });
+```
+
+### Testing (Testnet)
+
+Use an encrypted keystore (recommended):
+
+```bash
+# Generate encrypted keystore
+actp init
+# Enter password when prompted → creates .actp/keystore.json
+
+# Set password in env
+export ACTP_KEY_PASSWORD=your-password
+
+# SDK auto-detects keystore
+const client = await ACTPClient.create({ mode: 'testnet' });
+```
+
+### Production (Mainnet)
+
+**Option 1: Keystore (recommended for most)**
+```
+.actp/keystore.json + ACTP_KEY_PASSWORD from secrets manager
+```
+
+**Option 2: Explicit key from vault**
+```bash
+ACTP_PRIVATE_KEY=$(vault read -field=key secret/agirails)
+```
+
+**Option 3: Smart Wallet (zero-config, Tier 1)**
+```typescript
+ACTPClient.create({ mode: 'mainnet', wallet: 'auto' })
+```
+
+For detailed key management patterns, see `references/key-management.md`.
+
+## x402 Security Considerations
+
+x402 is a protocol for instant HTTP-based payments. Extra caution is required:
+
+- **x402 payments are instant and non-refundable** -- there is no escrow or dispute mechanism
+- **Always validate x402 provider URLs** -- HTTPS only, never HTTP
+- **X402Relay enforces fee splitting atomically** -- fees cannot be skipped or manipulated
+- **Set reasonable spending limits for x402 auto-payments** -- a misconfigured agent can drain funds fast
+- **Verify the x402 endpoint before paying** -- confirm the service is legitimate and returns expected data
+- **Monitor x402 spend separately** -- since there is no refund path, track cumulative spend carefully
+
 ## Production Checklist
 
 Before going to mainnet, complete this checklist:
@@ -85,7 +147,8 @@ Before going to mainnet, complete this checklist:
 - [ ] Dependencies audited (npm audit / pip audit)
 
 ### Configuration
-- [ ] Environment variables for all secrets
+- [ ] Keystore encrypted with strong password (or ACTP_PRIVATE_KEY from vault)
+- [ ] ACTP_KEY_PASSWORD injected from secrets manager, not committed
 - [ ] .gitignore includes .env and .actp/
 - [ ] Mode set via environment (not hardcoded)
 - [ ] RPC URL is private/authenticated
@@ -95,12 +158,14 @@ Before going to mainnet, complete this checklist:
 - [ ] Edge cases tested (deadline, disputes)
 - [ ] Error scenarios handled gracefully
 - [ ] Load testing completed
+- [ ] x402 payment flows tested separately
 
 ### Monitoring
 - [ ] Transaction monitoring set up
 - [ ] Balance alerts configured
 - [ ] Error tracking (Sentry, etc.)
 - [ ] Uptime monitoring
+- [ ] x402 spend tracking enabled
 
 ### Operations
 - [ ] Incident response plan documented
@@ -109,53 +174,6 @@ Before going to mainnet, complete this checklist:
 - [ ] Admin procedures documented
 
 For the complete 20-point checklist, see `references/production-checklist.md`.
-
-## Key Management
-
-### Development (Mock Mode)
-
-```bash
-# No real key needed
-AGIRAILS_MODE=mock
-```
-
-### Testing (Testnet)
-
-```bash
-# Generate dedicated test wallet
-npx ethers-cli wallet random
-
-# Store in .env (NEVER reuse for mainnet)
-PRIVATE_KEY=0x...
-```
-
-### Production (Mainnet)
-
-**Option 1: Environment Variables**
-```bash
-# Set in secure environment
-export PRIVATE_KEY=$(vault read -field=key secret/agirails)
-```
-
-**Option 2: AWS Secrets Manager**
-```typescript
-import { SecretsManager } from '@aws-sdk/client-secrets-manager';
-
-async function getPrivateKey() {
-  const client = new SecretsManager({ region: 'us-east-1' });
-  const secret = await client.getSecretValue({ SecretId: 'agirails/pk' });
-  return JSON.parse(secret.SecretString).privateKey;
-}
-```
-
-**Option 3: Hardware Wallet (Highest Security)**
-```typescript
-import { LedgerSigner } from '@ethersproject/hardware-wallets';
-
-const signer = new LedgerSigner(provider, 'hid', "m/44'/60'/0'/0/0");
-```
-
-For detailed key management patterns, see `references/key-management.md`.
 
 ## Common Vulnerabilities
 
@@ -215,6 +233,7 @@ The plugin includes a security-auditor agent that proactively reviews code for i
 - Creating `ACTPClient.create` calls
 - Modifying `.env` files
 - Asking about production deployment
+- Configuring x402 adapters or relay endpoints
 
 **Checks performed:**
 - Hardcoded keys detection
@@ -222,6 +241,8 @@ The plugin includes a security-auditor agent that proactively reviews code for i
 - .gitignore verification
 - Input validation review
 - Mode selection check
+- x402 URL validation (HTTPS enforcement)
+- Keystore password exposure check
 
 ## Incident Response
 
@@ -234,14 +255,16 @@ If you suspect a security issue:
    ```
 
 2. **Rotate Compromised Keys**
-   - Generate new wallet
-   - Transfer remaining funds
-   - Update configuration
+   - Generate new keystore: `actp init` (creates new .actp/keystore.json)
+   - Transfer remaining funds to new address
+   - Update ACTP_KEY_PASSWORD in secrets manager
+   - Redeploy configuration
 
 3. **Investigate**
    - Check transaction logs
    - Review access logs
    - Identify attack vector
+   - Check x402 payment history for unauthorized spend
 
 4. **Report**
    - Contact AGIRAILS security: https://agirails.io/contact

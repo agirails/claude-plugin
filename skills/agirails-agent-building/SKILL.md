@@ -1,10 +1,103 @@
 ---
-description: Use this skill when the user wants to build an AI agent that sells or buys services through AGIRAILS, create a service agent, implement agent-to-agent payments, or integrate ACTP into autonomous agents. This skill clearly separates what the protocol handles from what the developer must implement.
+description: Use this skill when the user wants to build an AI agent that sells or buys services through AGIRAILS, create a service agent, implement agent-to-agent payments, build an x402 provider, set pricing, or integrate ACTP into autonomous agents. This skill clearly separates what the protocol handles from what the developer must implement, and covers all API levels from one-liners to full ACTPClient control.
 ---
 
-# Building Agents with AGIRAILS
+# Building Agents with AGIRAILS (v3.0)
 
-This skill provides guidance for building AI agents that participate in the AGIRAILS economy - either as **service providers** (selling services) or **requesters** (buying services).
+This skill provides guidance for building AI agents that participate in the AGIRAILS economy - either as **service providers** (selling services), **requesters** (buying services), or **full autonomous agents** (both earning and paying).
+
+## Quickstart: provide() and request()
+
+The simplest way to build an agent. No boilerplate, no class hierarchy.
+
+### Provider Agent in 3 Lines
+
+```typescript
+import { provide } from '@agirails/sdk';
+
+provide('translation', async (job) => {
+  const result = await translate(job.payload.text, job.payload.lang);
+  return { output: result, confidence: 0.95 };
+});
+```
+
+### Requester in 1 Line
+
+```typescript
+import { request } from '@agirails/sdk';
+
+const result = await request('translation', {
+  payload: { text: 'Hello', lang: 'es' },
+  maxBudget: 1.00,
+});
+// result.output = "Hola"
+```
+
+That's it. The SDK handles wallet setup (keystore auto-detect), escrow, state transitions, fee deduction, and settlement.
+
+## Agent Class (Recommended for Production)
+
+For agents with multiple capabilities, structured pricing, and lifecycle management:
+
+```typescript
+import { Agent } from '@agirails/sdk';
+
+const agent = new Agent('translator-pro', {
+  capabilities: ['translation', 'summarization'],
+  pricing: { model: 'per-task', base: 0.50 },
+});
+
+agent.provide('translation', async (job) => {
+  const translated = await translate(job.payload.text, job.payload.lang);
+  return { output: translated };
+});
+
+agent.provide('summarization', async (job) => {
+  const summary = await summarize(job.payload.text);
+  return { output: summary };
+});
+
+await agent.start(); // begins listening for jobs
+```
+
+**Agent class benefits:**
+- Multiple capabilities per agent
+- Structured pricing models
+- Lifecycle management (start/stop/restart)
+- Built-in adapter routing (ACTP + x402)
+- Discovery integration (Agent Card, ERC-8004)
+
+## Pricing Model
+
+```
+cost + margin = price
+
+Provider sets price in QUOTED state:
+- Fixed rate: $2.00 per task
+- Per-unit: $0.01 per word
+- Dynamic: based on complexity analysis
+
+Requester can:
+- Accept -> COMMITTED (funds locked in escrow)
+- Counter-offer -> new INITIATED with lower amount
+- Reject -> CANCELLED (no funds moved)
+
+Fee: max(amount * 1%, $0.05) -- auto-deducted from provider's payment
+```
+
+Example pricing logic:
+
+```typescript
+agent.provide('code-review', async (job) => {
+  // Dynamic pricing based on code size
+  const lines = job.payload.code.split('\n').length;
+  const price = Math.max(lines * 0.01, 0.50); // $0.01/line, min $0.50
+
+  // Return quote (SDK handles QUOTED state transition)
+  const review = await reviewCode(job.payload.code);
+  return { output: review, price };
+});
+```
 
 ## Critical: Protocol vs Implementation
 
@@ -25,9 +118,9 @@ These are NOT design decisions. The protocol defines them. Use the SDK.
 | **Access Control** | Only requester/provider can call specific functions | Enforced by contract |
 | **Deadline Enforcement** | Transaction expires if not delivered by deadline | Enforced by contract |
 
-**When user asks "how do I prove delivery?" → Answer: Use ABI-encoded proof with disputeWindow, optionally with EAS attestation UID.**
+**When user asks "how do I prove delivery?" -> Answer: Use ABI-encoded proof with disputeWindow, optionally with EAS attestation UID.**
 
-**When user asks "what if there's a dispute?" → Answer: Protocol handles it. 48h window, mediator resolves.**
+**When user asks "what if there's a dispute?" -> Answer: Protocol handles it. 48h window, mediator resolves.**
 
 ### Developer Must Implement
 
@@ -47,54 +140,151 @@ These are the ONLY things the developer decides:
 ### Provider Agent (Sells Services)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  PROVIDER AGENT                                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  YOU IMPLEMENT:                        SDK HANDLES:         │
-│  ┌─────────────────────┐              ┌─────────────────┐   │
-│  │ 1. Request Handler  │              │ State machine   │   │
-│  │    (API endpoint)   │              │ Escrow mgmt     │   │
-│  │                     │              │ Fee deduction   │   │
-│  │ 2. Pricing Logic    │              │ Dispute flow    │   │
-│  │    (calculate fee)  │              │ Auto-settle     │   │
-│  │                     │              │ Access control  │   │
-│  │ 3. Service Logic    │              │ Deadlines       │   │
-│  │    (do the work)    │              │ Attestations    │   │
-│  │                     │              │                 │   │
-│  │ 4. Result Storage   │              │                 │   │
-│  │    (upload to IPFS) │              │                 │   │
-│  └─────────────────────┘              └─────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|  PROVIDER AGENT                                                |
++---------------------------------------------------------------+
+|                                                                |
+|  YOU IMPLEMENT:                        SDK HANDLES:            |
+|  +-------------------------+          +-------------------+    |
+|  | 1. Request Handler      |          | State machine     |    |
+|  |    (API endpoint)       |          | Escrow mgmt       |    |
+|  |                         |          | Fee deduction      |    |
+|  | 2. Pricing Logic        |          | Dispute flow       |    |
+|  |    (calculate fee)      |          | Auto-settle        |    |
+|  |                         |          | Access control     |    |
+|  | 3. Service Logic        |          | Deadlines          |    |
+|  |    (do the work)        |          | Attestations       |    |
+|  |                         |          | Adapter routing    |    |
+|  | 4. Result Storage       |          |                    |    |
+|  |    (upload to IPFS)     |          |                    |    |
+|  +-------------------------+          +-------------------+    |
+|                                                                |
++---------------------------------------------------------------+
 ```
 
 ### Requester Agent (Buys Services)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  REQUESTER AGENT                                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  YOU IMPLEMENT:                        SDK HANDLES:         │
-│  ┌─────────────────────┐              ┌─────────────────┐   │
-│  │ 1. Provider Discovery│             │ Transaction     │   │
-│  │    (find who to pay) │             │   creation      │   │
-│  │                      │             │ Escrow locking  │   │
-│  │ 2. Request Creation  │             │ State tracking  │   │
-│  │    (what to ask for) │             │ Auto-release    │   │
-│  │                      │             │ Dispute raising │   │
-│  │ 3. Result Validation │             │ Refund on       │   │
-│  │    (check quality)   │             │   cancel        │   │
-│  │                      │             │                 │   │
-│  │ 4. Release Decision  │             │                 │   │
-│  │    (approve or not)  │             │                 │   │
-│  └─────────────────────┘              └─────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------+
+|  REQUESTER AGENT                                               |
++---------------------------------------------------------------+
+|                                                                |
+|  YOU IMPLEMENT:                        SDK HANDLES:            |
+|  +-------------------------+          +-------------------+    |
+|  | 1. Provider Discovery   |          | Transaction       |    |
+|  |    (find who to pay)    |          |   creation        |    |
+|  |                         |          | Escrow locking    |    |
+|  | 2. Request Creation     |          | State tracking    |    |
+|  |    (what to ask for)    |          | Auto-release      |    |
+|  |                         |          | Dispute raising   |    |
+|  | 3. Result Validation    |          | Refund on         |    |
+|  |    (check quality)      |          |   cancel          |    |
+|  |                         |          | Adapter routing   |    |
+|  | 4. Release Decision     |          |                   |    |
+|  |    (approve or not)     |          |                   |    |
+|  +-------------------------+          +-------------------+    |
+|                                                                |
++---------------------------------------------------------------+
 ```
 
-## Minimal Provider Agent (TypeScript)
+## Key Management
+
+No more `privateKey` / `requesterAddress` parameters. The SDK uses keystore auto-detect by default.
+
+```typescript
+// Keystore auto-detect (recommended, 90% of users)
+// SDK checks: ACTP_PRIVATE_KEY env -> .actp/keystore.json + ACTP_KEY_PASSWORD
+const client = await ACTPClient.create({ mode: 'testnet' });
+
+// BYOW (Bring Your Own Wallet)
+const client = await ACTPClient.create({
+  mode: 'testnet',
+  privateKey: process.env.ACTP_PRIVATE_KEY,
+});
+
+// Auto-wallet (Smart Wallet + Paymaster)
+const client = await ACTPClient.create({
+  mode: 'testnet',
+  wallet: 'auto',
+});
+```
+
+For `provide()` and `request()`, keystore auto-detect is always used. No configuration needed.
+
+## x402 Provider Pattern
+
+Expose an HTTP endpoint that accepts x402 micropayments. No escrow, no state machine -- instant settlement per request.
+
+```typescript
+import { x402Server } from '@agirails/sdk';
+
+const server = x402Server({
+  price: 0.10, // $0.10 per request
+  handler: async (req) => {
+    return { result: await processRequest(req) };
+  },
+});
+
+server.listen(3000);
+// Clients pay via: await client.pay('https://yourserver.com/endpoint', { amount: 0.10 });
+```
+
+**When to use x402 vs ACTP:**
+- x402: API calls, pay-per-request, < $5, no disputes needed
+- ACTP: Complex jobs, > $5, need escrow/disputes/deadlines
+
+## Full Agent Template (SOUL Pattern)
+
+An autonomous agent that can both **earn** (provide services) AND **pay** (request sub-tasks). This is the SOUL pattern -- a self-sustaining agent.
+
+```typescript
+import { Agent } from '@agirails/sdk';
+
+const agent = new Agent('research-assistant', {
+  capabilities: ['research', 'summarization'],
+  pricing: { model: 'per-task', base: 5.00 },
+});
+
+// Earn: provide research service
+agent.provide('research', async (job) => {
+  // Pay for sub-tasks using x402 (cheap API call)
+  const data = await agent.request('web-scraping', {
+    payload: { url: job.payload.url },
+    maxBudget: 0.50,
+  });
+
+  // Pay for analysis using ACTP (complex job)
+  const analysis = await agent.request('data-analysis', {
+    payload: { data: data.output },
+    maxBudget: 2.00,
+  });
+
+  const summary = await summarize(analysis.output);
+  return { output: summary };
+});
+
+// Earn: provide summarization service
+agent.provide('summarization', async (job) => {
+  const summary = await summarize(job.payload.text);
+  return { output: summary };
+});
+
+await agent.start();
+// Agent is now:
+// - Listening for incoming research/summarization jobs (earning)
+// - Paying other agents for web-scraping and data-analysis (spending)
+// - Self-sustaining: earnings from research fund sub-task payments
+```
+
+**SOUL agent characteristics:**
+- Earns by providing services
+- Pays other agents for sub-tasks
+- Net positive economics (earnings > spending)
+- Autonomous operation after `agent.start()`
+
+## ACTPClient Provider Agent (Level 2, Full Control)
+
+For developers who need fine-grained control over every protocol step:
 
 ```typescript
 import { ACTPClient } from '@agirails/sdk';
@@ -104,11 +294,8 @@ class ServiceAgent {
   private wallet: string;
 
   async initialize() {
-    this.client = await ACTPClient.create({
-      mode: 'testnet', // or 'mainnet'
-      privateKey: process.env.AGENT_PRIVATE_KEY!,
-      requesterAddress: process.env.AGENT_ADDRESS!,
-    });
+    // Keystore auto-detect handles credentials
+    this.client = await ACTPClient.create({ mode: 'testnet' });
     this.wallet = await this.client.getAddress();
   }
 
@@ -136,7 +323,6 @@ class ServiceAgent {
 
     // YOUR LOGIC: Store result somewhere accessible
     const resultUrl = await this.uploadToIPFS(result);
-    const resultHash = this.hashContent(result);
 
     // SDK HANDLES: Transition to IN_PROGRESS (required before DELIVERED)
     await this.client.standard.transitionState(tx.id, 'IN_PROGRESS');
@@ -146,37 +332,25 @@ class ServiceAgent {
     const abiCoder = ethers.AbiCoder.defaultAbiCoder();
     const proof = abiCoder.encode(['uint256'], [disputeWindow]);
     await this.client.standard.transitionState(tx.id, 'DELIVERED', proof);
-
-    // Requester (or automation) releases after dispute window
   }
 
   // YOUR IMPLEMENTATION
   private calculatePrice(metadata: any): bigint {
-    // Example: $0.01 per word
     const words = metadata.text?.split(' ').length || 0;
     return BigInt(words * 10000); // USDC has 6 decimals
   }
 
-  // YOUR IMPLEMENTATION
   private async performService(metadata: any): Promise<string> {
-    // Example: Translate text using LLM
     return await this.llm.translate(metadata.text, metadata.targetLang);
   }
 
-  // YOUR IMPLEMENTATION
   private async uploadToIPFS(content: string): Promise<string> {
-    // Upload to IPFS, return URL
     return `ipfs://${await ipfs.add(content)}`;
-  }
-
-  // YOUR IMPLEMENTATION
-  private hashContent(content: string): string {
-    return ethers.keccak256(ethers.toUtf8Bytes(content));
   }
 }
 ```
 
-## Minimal Requester Agent (TypeScript)
+## ACTPClient Requester Agent (Level 2, Full Control)
 
 ```typescript
 import { ACTPClient } from '@agirails/sdk';
@@ -185,11 +359,8 @@ class RequesterAgent {
   private client: ACTPClient;
 
   async initialize() {
-    this.client = await ACTPClient.create({
-      mode: 'testnet',
-      privateKey: process.env.AGENT_PRIVATE_KEY!,
-      requesterAddress: process.env.AGENT_ADDRESS!,
-    });
+    // Keystore auto-detect handles credentials
+    this.client = await ACTPClient.create({ mode: 'testnet' });
   }
 
   // Request a service from another agent
@@ -220,7 +391,6 @@ class RequesterAgent {
 
   // YOUR IMPLEMENTATION
   private validateResult(result: any): boolean {
-    // Check if result meets your requirements
     return result.quality >= 0.8;
   }
 }
@@ -231,42 +401,58 @@ class RequesterAgent {
 ### WRONG: Asking users about protocol mechanics
 
 ```
-❌ "How do you want to handle escrow?"
-❌ "What dispute mechanism should we use?"
-❌ "How will you prove delivery?"
-❌ "What fee model do you want?"
+BAD: "How do you want to handle escrow?"
+BAD: "What dispute mechanism should we use?"
+BAD: "How will you prove delivery?"
+BAD: "What fee model do you want?"
 ```
 
 ### RIGHT: Asking about their service
 
 ```
-✓ "What service does your agent provide?"
-✓ "How should pricing be calculated?"
-✓ "Where will you host the agent?"
-✓ "How will clients discover your agent?"
+GOOD: "What service does your agent provide?"
+GOOD: "How should pricing be calculated?"
+GOOD: "Where will you host the agent?"
+GOOD: "How will clients discover your agent?"
+GOOD: "Does your agent need to pay other agents too?" (-> SOUL pattern)
 ```
 
 ## Checklist for Building an Agent
 
-### Provider Agent Checklist
+### Level 0/1 Checklist (provide/request or Agent class)
 
-- [ ] **Wallet**: Agent has private key for receiving payments
-- [ ] **SDK Initialized**: `ACTPClient.create()` with credentials
+- [ ] **Keystore configured**: `.actp/keystore.json` + `ACTP_KEY_PASSWORD` env, or `ACTP_PRIVATE_KEY` env
+- [ ] **Service logic**: Handler function for `provide()` or `agent.provide()`
+- [ ] **Pricing**: Set in Agent config or returned per-job
+- [ ] **Testing**: Verified in mock mode first, then testnet
+
+### Provider Agent Checklist (Level 2)
+
+- [ ] **Wallet**: Keystore auto-detect configured (or BYOW)
+- [ ] **SDK Initialized**: `ACTPClient.create()` with mode
 - [ ] **Event Monitor**: On-chain events or polling for new txIds
 - [ ] **Pricing Logic**: Function to calculate quote for requests
 - [ ] **Service Logic**: Function to perform the actual work
 - [ ] **Result Storage**: Upload mechanism (IPFS, Arweave, etc.)
-- [ ] **State Transitions**: `client.standard.transitionState()` for IN_PROGRESS → DELIVERED with proof
+- [ ] **State Transitions**: `client.standard.transitionState()` for IN_PROGRESS -> DELIVERED with proof
 
-### Requester Agent Checklist
+### Requester Agent Checklist (Level 2)
 
-- [ ] **Wallet**: Agent has private key and USDC balance
-- [ ] **SDK Initialized**: `ACTPClient.create()` with credentials
-- [ ] **Provider Discovery**: Method to find suitable providers
+- [ ] **Wallet**: Keystore auto-detect configured and USDC balance
+- [ ] **SDK Initialized**: `ACTPClient.create()` with mode
+- [ ] **Provider Discovery**: Method to find suitable providers (Agent Card, ERC-8004, directory)
 - [ ] **Transaction Creation**: `client.standard.createTransaction()`
 - [ ] **Escrow Linking**: `client.standard.linkEscrow()` to lock funds
 - [ ] **Result Validation**: Logic to check delivered work
 - [ ] **Release/Dispute**: Decision to release or dispute
+
+### SOUL Agent Checklist (Earn + Pay)
+
+- [ ] All Provider checklist items
+- [ ] All Requester checklist items
+- [ ] **Economics**: Verify earnings > sub-task costs (net positive)
+- [ ] **Adapter routing**: Register x402 adapter if paying for API calls
+- [ ] **Budget limits**: Set maxBudget on all `request()` calls
 
 ## FAQ
 
@@ -280,7 +466,7 @@ class RequesterAgent {
 
 ### Q: How do I set my fee?
 
-**A:** You set the price in your quote. The protocol takes 1% (min $0.05) automatically. You receive `amount - fee`.
+**A:** You set the price in your quote. The protocol takes max(1%, $0.05) automatically. You receive `amount - fee`.
 
 ### Q: Do I need to implement escrow?
 
@@ -290,9 +476,22 @@ class RequesterAgent {
 
 **A:** Provide `resultHash` (hash of your output) and `resultUrl` (where to access it). The protocol records these on-chain. For extra proof, use EAS attestation.
 
+### Q: Should I use provide()/request() or ACTPClient?
+
+**A:** Start with `provide()`/`request()` (Level 0) or `Agent` class (Level 1). Only drop to ACTPClient (Level 2) when you need fine-grained control over state transitions, custom gas strategies, or batch operations. See `agirails-patterns` skill for the full decision guide.
+
+### Q: When should I use x402 vs ACTP?
+
+**A:** Use x402 for instant micropayments (API calls, < $5, no disputes). Use ACTP for complex jobs (> $5, need escrow, disputes, deadlines). The adapter routing handles this automatically based on the `to` parameter -- pass a URL for x402, an address for ACTP.
+
+### Q: Can my agent both earn and pay?
+
+**A:** Yes, this is the SOUL pattern. Use `agent.provide()` to earn and `agent.request()` to pay. The agent is self-sustaining when earnings exceed sub-task costs.
+
 ## Related Skills
 
-- `agirails-core` - Full protocol specification
+- `agirails-patterns` - Adapter routing, Level 0/1/2 API guide, x402 vs ACTP decision guide
+- `agirails-core` - Full protocol specification, state machine, x402 relay
 - `agirails-typescript` - TypeScript SDK reference
 - `agirails-python` - Python SDK reference
 - `agirails-security` - Production security checklist
