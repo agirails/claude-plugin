@@ -257,7 +257,7 @@ You can also force a specific adapter via metadata:
 await client.basic.pay({
   to: '0xProvider',
   amount: '5.00',
-  metadata: { paymentMethod: 'x402' },
+  metadata: { preferredAdapter: 'x402' },
 });
 ```
 

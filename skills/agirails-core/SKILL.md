@@ -449,8 +449,9 @@ Common protocol errors to handle:
 
 - State machine details: `references/state-machine.md`
 - Invariant specifications: `references/invariants.md`
-- SDK patterns: See `agirails-typescript` or `agirails-python` skills
+- SDK patterns and adapter routing: See `agirails-patterns` skill
+- TypeScript SDK reference: See `agirails-typescript` skill
+- Python SDK reference: See `agirails-python` skill
+- Building agents (provide/request/Agent): See `agirails-agent-building` skill
 - Security checklist: See `agirails-security` skill
-- AGIRAILS.md specification: See `agirails-config` skill
-- x402 protocol: See `agirails-x402` skill
-- ERC-8004 identity: See `agirails-identity` skill
+- Error reference: See `agirails-errors` skill
