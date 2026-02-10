@@ -1,4 +1,4 @@
-# AGIRAILS SDK Plugin
+# AGIRAILS Plugin for Claude Code
 
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Plugin-blueviolet.svg)](https://claude.ai/code)
 [![Skills](https://img.shields.io/badge/skills-6-blue.svg)]()
@@ -6,17 +6,37 @@
 [![Agents](https://img.shields.io/badge/agents-4-orange.svg)]()
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-> Zero to first transaction in 15 minutes.
+**Give your AI agent a wallet. Let it earn and pay USDC — settled on-chain, gasless, in under 2 seconds.**
 
-Enable your AI agents to pay each other with blockchain-secured escrow.
+AGIRAILS is the open settlement layer for AI agents on Base L2. This plugin turns Claude Code into a full AGIRAILS integration environment — interactive onboarding, guided payments, autonomous security audits, and protocol knowledge loaded into every conversation.
 
-## Features
+## Why This Exists
 
-- **6 Skills** - Protocol knowledge loaded into Claude's context
-- **8 Commands** - Guided workflows for common tasks
-- **4 Agents** - Autonomous helpers for complex integrations
-- **TypeScript & Python** - Full support for both languages
-- **Mock Mode** - Instant testing without blockchain setup
+AI agents need to pay each other. Not with API keys and invoices — with real money, real escrow, real dispute resolution. AGIRAILS handles the hard parts:
+
+| What you get | How it works |
+|---|---|
+| **Gasless transactions** | Gas sponsored — your agent never needs ETH |
+| **USDC settlement** | Real stablecoin, not tokens. $1 = $1. On Base L2. |
+| **Encrypted wallet** | Auto-generated keystore (AES-128-CTR, chmod 600, gitignored). No keys in code, ever. |
+| **Two payment modes** | ACTP escrow for complex jobs. x402 instant for API calls. Same SDK. |
+| **On-chain identity** | ERC-8004 portable identity + reputation. Follows your agent across marketplaces. |
+| **10,000 test USDC** | `actp init` in mock mode — start building immediately. Testnet: 1,000 USDC minted gaslessly during registration. |
+| **1% transparent fee** | `max(amount * 1%, $0.05)`. Same on both payment paths. No subscriptions. |
+
+## ACTP or x402? Pick the Right Payment Mode
+
+```
+Need time to do the work?  →  ACTP (escrow)
+  Lock USDC → work → deliver → dispute window → settle
+  Think: hiring a contractor
+
+Instant API call?  →  x402 (instant)
+  Pay → get response. One step. No escrow. No disputes.
+  Think: buying from a vending machine
+```
+
+Both modes are in the same SDK. Your agent can use both simultaneously.
 
 ## Quick Start
 
@@ -31,64 +51,75 @@ Enable your AI agents to pay each other with blockchain-secured escrow.
 /agirails:pay
 ```
 
+Or skip the plugin and use the SDK directly:
+
+```bash
+npx actp init --mode mock
+npx actp init --scaffold --intent earn --service code-review --price 5
+npx ts-node agent.ts
+```
+
+Three commands. Mock mode. No keys, no gas, no config.
+
 ## Commands
 
-| Command | Description |
+| Command | What it does |
 |---------|-------------|
-| `/agirails:init` | Set up SDK in your project |
-| `/agirails:pay` | Create a payment interactively |
-| `/agirails:status` | Check transaction status |
-| `/agirails:watch` | Monitor transaction in real-time |
-| `/agirails:debug` | Diagnose integration issues |
-| `/agirails:states` | Visualize ACTP state machine |
-| `/agirails:upgrade` | Upgrade SDK version |
-| `/agirails:example` | Generate working code examples |
+| `/agirails:init` | Interactive setup — asks preferences, installs SDK, generates agent code |
+| `/agirails:pay` | Guided payment — routes ACTP or x402 based on recipient format |
+| `/agirails:status` | Check transaction state in the 8-state machine |
+| `/agirails:watch` | Monitor transaction state changes in real-time |
+| `/agirails:debug` | Diagnose integration issues with automatic fix suggestions |
+| `/agirails:states` | Visualize the ACTP state machine with transition rules |
+| `/agirails:upgrade` | Upgrade SDK version with migration guidance |
+| `/agirails:example` | Generate working code examples adapted to your project |
 
 ## Skills
 
-Skills are automatically loaded when you discuss related topics:
+Skills load automatically when you discuss related topics:
 
-- **agirails-core** - ACTP protocol, state machine, invariants
-- **agirails-agent-building** - Build AI agents that sell/buy services
-- **agirails-patterns** - Three-tier API, mode selection
-- **agirails-security** - Production checklist, key management
-- **agirails-typescript** - TypeScript SDK reference
-- **agirails-python** - Python SDK reference
+| Skill | Triggers on |
+|-------|-------------|
+| **agirails-core** | Protocol, state machine, escrow, contracts, fees |
+| **agirails-typescript** | TypeScript SDK, `@agirails/sdk`, Node.js integration |
+| **agirails-python** | Python SDK, `agirails` package, asyncio patterns |
+| **agirails-patterns** | API tiers (Level 0/1/2), adapter routing, mode selection |
+| **agirails-agent-building** | Provider/requester setup, SOUL pattern, pricing model |
+| **agirails-security** | Key management, production checklist, security audit |
 
 ## Agents
 
-Agents handle complex, multi-step tasks:
+Agents handle complex, multi-step tasks autonomously:
 
-- **integration-wizard** - Full integration walkthrough
-- **testing-assistant** - Generate comprehensive tests
-- **migration-helper** - SDK version upgrades
-- **security-auditor** - Proactive security review
+| Agent | What it does |
+|-------|-------------|
+| **integration-wizard** | End-to-end walkthrough based on your tech stack |
+| **testing-assistant** | Generate tests covering happy paths, edge cases, and error scenarios |
+| **security-auditor** | Proactive review for key management, escrow safety, production readiness |
+| **migration-helper** | SDK version upgrades with breaking change guidance |
+
+## Networks
+
+| | Mock | Testnet (Base Sepolia) | Mainnet (Base) |
+|---|---|---|---|
+| **Cost to start** | Free | Free (1,000 USDC minted during registration) | Real USDC |
+| **Gas** | Simulated | Gas sponsored | Gas sponsored |
+| **USDC** | 10,000 auto-minted | 1,000 minted gaslessly on registration | bridge.base.org |
+| **Escrow** | Auto-releases | Manual `release()` | Manual `release()` |
+| **Tx limit** | None | None | $1,000 |
 
 ## Requirements
 
 - Claude Code CLI
-- Node.js 18+ (for TypeScript) or Python 3.9+ (for Python)
-- No blockchain wallet needed for mock mode
+- Node.js 18+ (TypeScript) or Python 3.9+ (Python)
+- No wallet or blockchain needed for mock mode
 
-## Mock Mode
+## Links
 
-All examples use mock mode by default:
-- No real funds or blockchain required
-- State persists in `.actp/` directory
-- Mint unlimited test USDC
-- Perfect for development and testing
-
-## Learn More
-
-- [AGIRAILS Documentation](https://docs.agirails.io)
-- [ACTP Protocol Specification](https://docs.agirails.io/protocol)
-- [SDK Reference](https://docs.agirails.io/sdk)
-- [GitHub Repository](https://github.com/agirails/claude-plugin)
-
-## Support
-
-- **Discord**: [AGIRAILS Community](https://discord.gg/nuhCt75qe4)
-- **Issues**: [GitHub Issues](https://github.com/agirails/claude-plugin/issues)
+- [SDK (npm)](https://www.npmjs.com/package/@agirails/sdk) | [SDK (pip)](https://pypi.org/project/agirails/)
+- [GitHub](https://github.com/agirails) | [Docs](https://docs.agirails.io) | [Examples](https://github.com/agirails/sdk-js/tree/main/examples)
+- [Discord](https://discord.gg/nuhCt75qe4) | [Issues](https://github.com/agirails/claude-plugin/issues)
+- Security: security@agirails.io
 
 ## License
 
