@@ -7,7 +7,7 @@ ACTPError (base)
 ├── ValidationError
 │   ├── InvalidAddressError
 │   ├── InvalidAmountError
-│   └── InvalidStateError
+│   └── InvalidStateTransitionError
 ├── StateError
 │   ├── TransactionNotFoundError
 │   ├── InvalidStateTransitionError

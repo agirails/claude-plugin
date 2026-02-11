@@ -173,7 +173,10 @@ x402 is an HTTP-native payment protocol for instant, one-request-one-response pa
 import { X402Adapter } from '@agirails/sdk';
 
 // Register the adapter
-client.registerAdapter(new X402Adapter(client.advanced, client.getAddress()));
+client.registerAdapter(new X402Adapter(await client.getAddress(), {
+  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
+  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+}));
 
 // Pay via URL (adapter auto-routes to x402)
 await client.pay('https://provider.example.com/api/endpoint', { amount: 0.50 });
@@ -212,9 +215,9 @@ These are canonical CREATE2 addresses (same on all chains).
 
 Register via `@agirails/sdk/erc8004`:
 ```
-import { ERC8004Client } from '@agirails/sdk/erc8004';
+import { ERC8004Bridge } from '@agirails/sdk/erc8004';
 
-const identity = new ERC8004Client(provider, signer);
+const identity = new ERC8004Bridge(provider, signer);
 await identity.register({ name: 'my-agent', capabilities: ['code-review'] });
 ```
 

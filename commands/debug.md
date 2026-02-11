@@ -62,7 +62,6 @@ Options:
 // Test connection
 const client = await ACTPClient.create({
   mode: 'mock',
-  requesterAddress: '0xYourAddress',
 });
 console.log('Mode:', client.getMode());
 console.log('Address:', client.getAddress());
@@ -186,7 +185,7 @@ console.log('Valid next states:', validNext);
 // Step 1: Check state
 const status = await client.basic.checkStatus(txId);
 const tx = await client.standard.getTransaction(txId);
-const now = client.advanced.time.now();
+const now = (client.advanced as IMockRuntime).time.now();
 
 // Step 2: Determine action based on state
 switch (status.state) {

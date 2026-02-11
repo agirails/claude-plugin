@@ -8,13 +8,11 @@ Private key security is critical for blockchain applications. Choose the right p
 
 ### Development (Mock Mode)
 
-No real key needed. Use a placeholder address.
+No real key needed. SDK generates a random address.
 
 ```typescript
-const client = await ACTPClient.create({
-  mode: 'mock',
-  requesterAddress: '0x1234567890123456789012345678901234567890',
-});
+const client = await ACTPClient.create({ mode: 'mock' });
+const myAddress = await client.getAddress();
 ```
 
 ### Testing (Testnet)
@@ -34,11 +32,9 @@ echo "PRIVATE_KEY=0x123..." >> .env.test
 ```
 
 ```typescript
-const client = await ACTPClient.create({
-  mode: 'testnet',
-  privateKey: process.env.PRIVATE_KEY,
-  requesterAddress: process.env.REQUESTER_ADDRESS,
-});
+// Keystore auto-detect (recommended)
+const client = await ACTPClient.create({ mode: 'testnet' });
+// Or explicit: privateKey: process.env.ACTP_PRIVATE_KEY
 ```
 
 ### Production (Mainnet)
@@ -59,11 +55,9 @@ export PRIVATE_KEY=0x...
 ```
 
 ```typescript
-const client = await ACTPClient.create({
-  mode: 'mainnet',
-  privateKey: process.env.PRIVATE_KEY,
-  requesterAddress: process.env.REQUESTER_ADDRESS,
-});
+// Keystore auto-detect (recommended)
+const client = await ACTPClient.create({ mode: 'mainnet' });
+// Or explicit: privateKey: process.env.ACTP_PRIVATE_KEY
 ```
 
 **Pros:**
@@ -103,7 +97,6 @@ const privateKey = await getPrivateKey();
 const client = await ACTPClient.create({
   mode: 'mainnet',
   privateKey,
-  requesterAddress: process.env.REQUESTER_ADDRESS,
 });
 ```
 

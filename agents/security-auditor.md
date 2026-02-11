@@ -194,7 +194,7 @@ app.post('/pay', async (req, res) => {
 
 **GOOD - Sanitized errors:**
 ```typescript
-import { InsufficientBalanceError, InvalidStateError } from '@agirails/sdk';
+import { InsufficientBalanceError, InvalidStateTransitionError } from '@agirails/sdk';
 
 app.post('/pay', async (req, res) => {
   try {
@@ -207,7 +207,7 @@ app.post('/pay', async (req, res) => {
     if (error instanceof InsufficientBalanceError) {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
-    if (error instanceof InvalidStateError) {
+    if (error instanceof InvalidStateTransitionError) {
       return res.status(400).json({ error: 'Invalid transaction state' });
     }
 

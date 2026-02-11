@@ -22,7 +22,10 @@ await client.pay('0xProviderAddress', { amount: 10.00 });
 
 // x402 instant (requires adapter) - URL detected, routes to x402
 import { X402Adapter } from '@agirails/sdk';
-client.registerAdapter(new X402Adapter(client.advanced, client.getAddress()));
+client.registerAdapter(new X402Adapter(await client.getAddress(), {
+  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
+  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+}));
 await client.pay('https://api.example.com/translate', { amount: 0.50 });
 
 // ERC-8004 (resolve agent ID to address) - number detected, resolves via registry
@@ -426,7 +429,10 @@ const agent = new Agent('research-assistant', {
 });
 
 // Register x402 for API calls
-agent.registerAdapter(new X402Adapter(agent.advanced, agent.getAddress()));
+agent.registerAdapter(new X402Adapter(await agent.getAddress(), {
+  expectedNetwork: 'base-sepolia',
+  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+}));
 
 agent.provide('research', async (job) => {
   // Use x402 for cheap API calls

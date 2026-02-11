@@ -176,7 +176,10 @@ async function createX402Payment() {
   });
 
   // Register x402 adapter for URL-based payments
-  client.registerAdapter(new X402Adapter(client.advanced, client.getAddress()));
+  client.registerAdapter(new X402Adapter(await client.getAddress(), {
+    expectedNetwork: 'base-sepolia', // or 'base-mainnet'
+    transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+  }));
 
   const result = await client.pay('https://api.example.com/translate', {
     amount: 0.50,

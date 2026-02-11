@@ -142,7 +142,6 @@ export async function initPayments() {
   client = await ACTPClient.create({
     mode: process.env.NODE_ENV === 'production' ? 'mainnet' : 'mock',
     privateKey: process.env.PRIVATE_KEY,
-    requesterAddress: process.env.REQUESTER_ADDRESS,
   });
 }
 
@@ -195,11 +194,8 @@ class ACTPService:
         self.client = None
 
     async def initialize(self, mode: str = "mock"):
-        self.client = await ACTPClient.create(
-            mode=mode,
-            private_key=os.environ.get("PRIVATE_KEY"),
-            requester_address=os.environ.get("REQUESTER_ADDRESS"),
-        )
+        # Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD
+        self.client = await ACTPClient.create(mode=mode)
 
     async def create_payment(
         self,

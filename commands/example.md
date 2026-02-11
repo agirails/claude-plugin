@@ -69,7 +69,6 @@ import { ACTPClient, IMockRuntime } from '@agirails/sdk';
 import { ethers } from 'ethers';
 
 // Configuration
-const REQUESTER_ADDRESS = '0x1111111111111111111111111111111111111111';
 const PROVIDER_ADDRESS = '0x2222222222222222222222222222222222222222';
 const PAYMENT_AMOUNT = 10.00; // USDC
 
@@ -77,16 +76,14 @@ async function main() {
   console.log('=== AGIRAILS Basic Payment ===\n');
 
   // 1. Create client in mock mode (no real funds needed)
-  const client = await ACTPClient.create({
-    mode: 'mock',
-    requesterAddress: REQUESTER_ADDRESS,
-  });
+  const client = await ACTPClient.create({ mode: 'mock' });
+  const myAddress = await client.getAddress();
   console.log('✓ Client created in mock mode\n');
 
   // 2. Mint test USDC (mock mode only)
   // Mint uses USDC wei (6 decimals): 1000 USDC = 1_000_000_000
-  await client.mintTokens(REQUESTER_ADDRESS, '1000000000');
-  const balance = await client.getBalance(REQUESTER_ADDRESS);
+  await client.mintTokens(myAddress, '1000000000');
+  const balance = await client.getBalance(myAddress);
   console.log(`✓ Balance (wei): ${balance}\n`);
 
   // 3. Create payment
@@ -153,16 +150,14 @@ async def main():
     print("=== AGIRAILS Basic Payment ===\n")
 
     # 1. Create client in mock mode (no real funds needed)
-    client = await ACTPClient.create(
-        mode="mock",
-        requester_address=REQUESTER_ADDRESS,
-    )
+    client = await ACTPClient.create(mode="mock")
+    my_address = await client.get_address()
     print("✓ Client created in mock mode\n")
 
     # 2. Mint test USDC (mock mode only)
     # Mint uses USDC amount (will be converted to wei)
-    await client.mint_tokens(REQUESTER_ADDRESS, 1000)
-    balance = await client.get_balance(REQUESTER_ADDRESS)
+    await client.mint_tokens(my_address, 1000)
+    balance = await client.get_balance(my_address)
     print(f"✓ Balance: {balance} USDC\n")
 
     # 3. Create payment
@@ -222,16 +217,12 @@ const PROVIDER = '0x2222222222222222222222222222222222222222';
 async function main() {
   console.log('=== AGIRAILS Full Transaction Lifecycle ===\n');
 
-  // Create clients for both parties
-  const requesterClient = await ACTPClient.create({
-    mode: 'mock',
-    requesterAddress: REQUESTER,
-  });
+  // Create clients for both parties (mock mode assigns random addresses)
+  const requesterClient = await ACTPClient.create({ mode: 'mock' });
+  const REQUESTER = await requesterClient.getAddress();
 
-  const providerClient = await ACTPClient.create({
-    mode: 'mock',
-    requesterAddress: PROVIDER, // Provider perspective
-  });
+  const providerClient = await ACTPClient.create({ mode: 'mock' });
+  const PROVIDER = await providerClient.getAddress();
 
   // Mint tokens (USDC wei): 1000 USDC = 1_000_000_000
   await requesterClient.mintTokens(REQUESTER, '1000000000');
@@ -317,14 +308,12 @@ import { ethers } from 'ethers';
 async function main() {
   console.log('=== AGIRAILS Dispute Handling ===\n');
 
-  const client = await ACTPClient.create({
-    mode: 'mock',
-    requesterAddress: '0x1111111111111111111111111111111111111111',
-  });
+  const client = await ACTPClient.create({ mode: 'mock' });
+  const myAddress = await client.getAddress();
 
   // Setup: Create and complete a transaction
   // Mint uses USDC wei (6 decimals): 1000 USDC = 1_000_000_000
-  await client.mintTokens('0x1111111111111111111111111111111111111111', '1000000000');
+  await client.mintTokens(myAddress, '1000000000');
 
   const result = await client.basic.pay({
     to: '0x2222222222222222222222222222222222222222',
@@ -386,10 +375,9 @@ import { ACTPClient } from '@agirails/sdk';
 const TERMINAL = new Set(['SETTLED', 'CANCELLED']);
 
 async function main() {
+  // Keystore auto-detect: uses .actp/keystore.json + ACTP_KEY_PASSWORD
   const client = await ACTPClient.create({
     mode: 'testnet', // or 'mainnet'
-    privateKey: process.env.PRIVATE_KEY,
-    requesterAddress: process.env.REQUESTER_ADDRESS!,
   });
 
   const txId = '0xYourTransactionId';

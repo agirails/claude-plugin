@@ -124,11 +124,9 @@ const client = new ACTPClient({
   privateKey: '0x...',
 });
 
-// NEW (2.0)
+// NEW (2.0) - keystore auto-detect (recommended)
 const client = await ACTPClient.create({
   mode: 'testnet',  // 'mock' | 'testnet' | 'mainnet'
-  privateKey: '0x...',
-  requesterAddress: '0xYourAddress',
 });
 ```
 
@@ -215,15 +213,13 @@ const results = await client.advanced.batchPay([
 After upgrade, verify installation:
 
 ```typescript
-import { ACTPClient, VERSION } from '@agirails/sdk';
+import { ACTPClient } from '@agirails/sdk';
 
-console.log('SDK Version:', VERSION);  // Should show 2.1.0
-
-// Test connection
+// Test connection (keystore auto-detect)
 const client = await ACTPClient.create({
   mode: 'mock',
-  requesterAddress: '0xYourAddress',
 });
+console.log('Mode:', client.getMode());
 console.log('Mock mode:', client.getMode() === 'mock');
 ```
 

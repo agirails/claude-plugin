@@ -18,17 +18,17 @@
 ```typescript
 const client = await ACTPClient.create({
   mode: 'mock',
-  requesterAddress: '0x1234567890123456789012345678901234567890',
   stateDirectory: '.actp', // Optional, default
 });
+const myAddress = await client.getAddress();
 ```
 
 ```python
 client = await ACTPClient.create(
     mode="mock",
-    requester_address="0x1234567890123456789012345678901234567890",
     state_directory=".actp",  # Optional
 )
+my_address = await client.get_address()
 ```
 
 ### Features
@@ -84,20 +84,16 @@ await client.reset();
 ### Configuration
 
 ```typescript
+// Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD env var
 const client = await ACTPClient.create({
   mode: 'testnet',
-  privateKey: process.env.PRIVATE_KEY,
-  requesterAddress: process.env.REQUESTER_ADDRESS,
-  rpcUrl: 'https://sepolia.base.org', // Optional, has default
 });
 ```
 
 ```python
+# Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD env var
 client = await ACTPClient.create(
     mode="testnet",
-    private_key=os.environ["PRIVATE_KEY"],
-    requester_address=os.environ["REQUESTER_ADDRESS"],
-    rpc_url="https://sepolia.base.org",  # Optional
 )
 ```
 
@@ -157,20 +153,16 @@ const addresses = {
 ### Configuration
 
 ```typescript
+// Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD env var
 const client = await ACTPClient.create({
   mode: 'mainnet',
-  privateKey: process.env.PRIVATE_KEY,
-  requesterAddress: process.env.REQUESTER_ADDRESS,
-  rpcUrl: process.env.BASE_RPC_URL, // Use private RPC
 });
 ```
 
 ```python
+# Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD env var
 client = await ACTPClient.create(
     mode="mainnet",
-    private_key=os.environ["PRIVATE_KEY"],
-    requester_address=os.environ["REQUESTER_ADDRESS"],
-    rpc_url=os.environ["BASE_RPC_URL"],
 )
 ```
 
@@ -255,26 +247,21 @@ const addresses = {
 ```typescript
 const mode = process.env.AGIRAILS_MODE || 'mock';
 
-const client = await ACTPClient.create({
-  mode,
-  privateKey: mode !== 'mock' ? process.env.PRIVATE_KEY : undefined,
-  requesterAddress: process.env.REQUESTER_ADDRESS,
-});
+// Keystore auto-detect handles credentials for all modes
+const client = await ACTPClient.create({ mode });
 ```
 
 ```bash
 # .env.development
 AGIRAILS_MODE=mock
-REQUESTER_ADDRESS=0x...
 
 # .env.staging
 AGIRAILS_MODE=testnet
-REQUESTER_ADDRESS=0x...
-PRIVATE_KEY=0x...
+ACTP_KEY_PASSWORD=your-keystore-password
 
 # .env.production
 AGIRAILS_MODE=mainnet
-PRIVATE_KEY=0x...
+ACTP_KEY_PASSWORD=your-keystore-password
 BASE_RPC_URL=https://...
 ```
 

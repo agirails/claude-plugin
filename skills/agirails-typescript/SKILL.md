@@ -194,7 +194,10 @@ import { ACTPClient, X402Adapter } from '@agirails/sdk';
 const client = await ACTPClient.create({ mode: 'mainnet' });
 
 // Register x402 adapter (not registered by default)
-client.registerAdapter(new X402Adapter(client.advanced, client.getAddress()));
+client.registerAdapter(new X402Adapter(await client.getAddress(), {
+  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
+  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+}));
 
 // Pay via URL (auto-routes to x402)
 await client.pay('https://provider.example.com/api/endpoint', { amount: 0.50 });
@@ -241,12 +244,15 @@ await client.basic.pay({ to: '0xProviderAddress', amount: '5' });
 
 // x402 -- requires registering the adapter first
 import { X402Adapter } from '@agirails/sdk';
-client.registerAdapter(new X402Adapter(client.advanced, client.getAddress()));
+client.registerAdapter(new X402Adapter(await client.getAddress(), {
+  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
+  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+}));
 await client.basic.pay({ to: 'https://api.provider.com/service', amount: '1' });
 
 // ERC-8004 -- requires bridge configuration
-import { ERC8004Client } from '@agirails/sdk/erc8004';
-const identity = new ERC8004Client(provider, signer);
+import { ERC8004Bridge } from '@agirails/sdk/erc8004';
+const identity = new ERC8004Bridge(provider, signer);
 const profile = await identity.resolve(agentId);
 await client.basic.pay({ to: profile.owner, amount: '5', erc8004AgentId: agentId });
 ```
@@ -268,9 +274,9 @@ await client.basic.pay({
 On-chain portable identity for agents. Replaces the deprecated DID:ethr system.
 
 ```typescript
-import { ERC8004Client } from '@agirails/sdk/erc8004';
+import { ERC8004Bridge } from '@agirails/sdk/erc8004';
 
-const identity = new ERC8004Client(provider, signer);
+const identity = new ERC8004Bridge(provider, signer);
 
 // Register identity
 await identity.register({ name: 'my-agent', capabilities: ['code-review'] });
@@ -781,7 +787,10 @@ await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
 // Error: No adapter found for URL target
 
 // CORRECT - register adapter first
-client.registerAdapter(new X402Adapter(client.advanced, client.getAddress()));
+client.registerAdapter(new X402Adapter(await client.getAddress(), {
+  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
+  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+}));
 await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
 ```
 

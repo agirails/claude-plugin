@@ -60,7 +60,7 @@ Help developers write comprehensive tests that ensure their AGIRAILS integration
 ```typescript
 // __tests__/actp.test.ts
 import { ACTPClient, IMockRuntime } from '@agirails/sdk';
-import { InsufficientBalanceError, InvalidStateError } from '@agirails/sdk';
+import { InsufficientBalanceError, InvalidStateTransitionError } from '@agirails/sdk';
 import { ethers } from 'ethers';
 
 describe('ACTP Integration', () => {
@@ -72,7 +72,6 @@ describe('ACTP Integration', () => {
   beforeAll(async () => {
     client = await ACTPClient.create({
       mode: 'mock',
-      requesterAddress: REQUESTER,
     });
   });
 
@@ -92,7 +91,7 @@ describe('ACTP Integration', () => {
 # tests/test_actp.py
 import pytest
 from agirails import ACTPClient
-from agirails.errors import InsufficientBalanceError, InvalidStateError
+from agirails.errors import InsufficientBalanceError, InvalidStateTransitionError
 
 REQUESTER = "0x1111111111111111111111111111111111111111"
 PROVIDER = "0x2222222222222222222222222222222222222222"
@@ -102,7 +101,7 @@ PROVIDER = "0x2222222222222222222222222222222222222222"
 async def client():
     client = await ACTPClient.create(
         mode="mock",
-        requester_address=REQUESTER,
+
     )
     yield client
 
@@ -202,7 +201,7 @@ describe('Error Handling', () => {
     // Try to skip DELIVERED and go straight to SETTLED
     await expect(
       client.standard.releaseEscrow(result.txId)
-    ).rejects.toThrow(InvalidStateError);
+    ).rejects.toThrow(InvalidStateTransitionError);
   });
 
   it('should reject payment to self', async () => {
@@ -290,7 +289,7 @@ describe('State Machine', () => {
 
       await expect(
         client.standard.transitionState(txId, to)
-      ).rejects.toThrow(InvalidStateError);
+      ).rejects.toThrow(InvalidStateTransitionError);
     }
   );
 });
@@ -483,7 +482,6 @@ describe('Environment Differences', () => {
     const testnetClient = await ACTPClient.create({
       mode: 'testnet',
       privateKey: process.env.TEST_PRIVATE_KEY,
-      requesterAddress: process.env.TEST_REQUESTER_ADDRESS!,
     });
 
     const start = Date.now();

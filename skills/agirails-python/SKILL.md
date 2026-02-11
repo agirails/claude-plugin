@@ -198,7 +198,10 @@ from agirails import ACTPClient, X402Adapter
 client = await ACTPClient.create(mode="mainnet")
 
 # Register x402 adapter (not registered by default)
-client.register_adapter(X402Adapter(client.advanced, client.get_address()))
+client.register_adapter(X402Adapter(await client.get_address(), {
+    "expected_network": "base-sepolia",  # or "base-mainnet"
+    "transfer_fn": transfer_usdc,  # async fn(to, amount) -> tx_hash
+}))
 
 # Pay via URL (auto-routes to x402)
 await client.pay('https://provider.example.com/api/endpoint', amount=0.50)
@@ -245,12 +248,15 @@ await client.basic.pay({"to": "0xProviderAddress", "amount": "5"})
 
 # x402 -- requires registering the adapter first
 from agirails import X402Adapter
-client.register_adapter(X402Adapter(client.advanced, client.get_address()))
+client.register_adapter(X402Adapter(await client.get_address(), {
+    "expected_network": "base-sepolia",  # or "base-mainnet"
+    "transfer_fn": transfer_usdc,  # async fn(to, amount) -> tx_hash
+}))
 await client.basic.pay({"to": "https://api.provider.com/service", "amount": "1"})
 
 # ERC-8004 -- requires bridge configuration
-from agirails.erc8004 import ERC8004Client
-identity = ERC8004Client(provider, signer)
+from agirails.erc8004 import ERC8004Bridge
+identity = ERC8004Bridge(provider, signer)
 profile = await identity.resolve(agent_id)
 await client.basic.pay({"to": profile.owner, "amount": "5", "erc8004_agent_id": agent_id})
 ```
@@ -262,9 +268,9 @@ await client.basic.pay({"to": profile.owner, "amount": "5", "erc8004_agent_id": 
 On-chain portable identity for agents. Replaces the deprecated DID:ethr system.
 
 ```python
-from agirails.erc8004 import ERC8004Client
+from agirails.erc8004 import ERC8004Bridge
 
-identity = ERC8004Client(provider, signer)
+identity = ERC8004Bridge(provider, signer)
 
 # Register identity
 await identity.register(name="my-agent", capabilities=["code-review"])
@@ -723,7 +729,10 @@ await client.basic.pay({"to": "https://api.provider.com/service", "amount": "5"}
 # Error: No adapter found for URL target
 
 # CORRECT - register adapter first
-client.register_adapter(X402Adapter(client.advanced, client.get_address()))
+client.register_adapter(X402Adapter(await client.get_address(), {
+    "expected_network": "base-sepolia",  # or "base-mainnet"
+    "transfer_fn": transfer_usdc,  # async fn(to, amount) -> tx_hash
+}))
 await client.basic.pay({"to": "https://api.provider.com/service", "amount": "5"})
 ```
 
