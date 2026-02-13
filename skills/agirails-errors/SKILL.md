@@ -50,20 +50,6 @@ try {
 }
 ```
 
-**Python:**
-```python
-from agirails import ACTPError, InsufficientBalanceError
-
-try:
-    await client.basic.pay({"to": to, "amount": amount})
-except InsufficientBalanceError as e:
-    # Handle specific error
-    pass
-except ACTPError as e:
-    # Handle any ACTP error
-    print(f"Error [{e.code}]: {e}")
-```
-
 ## References
 
 - `references/error-reference.md` - Complete error type documentation with examples

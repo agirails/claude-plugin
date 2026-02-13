@@ -25,24 +25,51 @@ The SDK ships as **CommonJS**. It works with `require()` and with bundlers (webp
 
 ---
 
-## Quick Start
+## Quick Start (Copy-Paste-Run)
+
+Save as `quickstart.js` and run with `node quickstart.js` — no wallet, no keys:
+
+```javascript
+const { ACTPClient } = require('@agirails/sdk');
+
+async function main() {
+  // Mock mode: no blockchain, no keys needed
+  const client = await ACTPClient.create({ mode: 'mock' });
+  console.log('Address:', client.getAddress());
+
+  // Mint test USDC (mock starts with 0 balance)
+  await client.mintTokens(client.getAddress(), '10000000000'); // 10,000 USDC
+
+  // Pay a provider (escrow flow)
+  const result = await client.pay({
+    to: '0x0000000000000000000000000000000000000001',
+    amount: '5.00', // 5 USDC (human-readable, not wei)
+  });
+  console.log('Payment:', result.txId, '| State:', result.state);
+  console.log('Release required:', result.releaseRequired);
+}
+
+main().catch(console.error);
+```
+
+**For testnet/mainnet:** Replace `mock` with `testnet` or `mainnet`. Set `ACTP_PRIVATE_KEY` env var or use the keystore (`actp init`).
 
 ```typescript
+// TypeScript with keystore auto-detect
 import { ACTPClient } from '@agirails/sdk';
 
-// Keystore auto-detect (recommended)
-// SDK checks: ACTP_PRIVATE_KEY env -> .actp/keystore.json + ACTP_KEY_PASSWORD
-const client = await ACTPClient.create({ mode: 'testnet' });
+async function main() {
+  // Checks: ACTP_PRIVATE_KEY env -> .actp/keystore.json + ACTP_KEY_PASSWORD
+  const client = await ACTPClient.create({ mode: 'testnet' });
+  const result = await client.basic.pay({
+    to: '0xProviderAddress',
+    amount: '100.00',
+    deadline: '+24h',
+  });
+  console.log('Transaction ID:', result.txId);
+}
 
-// Create a payment
-const result = await client.basic.pay({
-  to: '0xProviderAddress',
-  amount: '100.00',
-  deadline: '+24h',
-});
-
-console.log('Transaction ID:', result.txId);
-console.log('State:', result.state);
+main().catch(console.error);
 ```
 
 ---
@@ -60,14 +87,14 @@ import { provide, request } from '@agirails/sdk';
 
 // Provider: one-liner to start earning
 provide('code-review', async (job) => {
-  const result = await reviewCode(job.payload);
+  const result = await reviewCode(job.input);
   return { output: result, confidence: 0.95 };
 });
 
 // Requester: one-liner to pay and get result
 const result = await request('code-review', {
-  payload: { repo: 'https://github.com/user/repo', pr: 42 },
-  maxBudget: 5.00,
+  input: { repo: 'https://github.com/user/repo', pr: 42 },
+  budget: 5.00,
 });
 ```
 
@@ -78,14 +105,15 @@ For agents that provide and/or request multiple services:
 ```typescript
 import { Agent } from '@agirails/sdk';
 
-const agent = new Agent('my-code-reviewer', {
-  capabilities: ['code-review', 'bug-fixing'],
-  pricing: { model: 'per-task', base: 2.00 },
+const agent = new Agent({
+  name: 'my-code-reviewer',
+  network: 'testnet',
+  behavior: { concurrency: 3 },
 });
 
 // As provider
 agent.provide('code-review', async (job) => {
-  const result = await reviewCode(job.payload);
+  const result = await reviewCode(job.input);
   return { output: result, confidence: 0.95 };
 });
 
@@ -120,7 +148,10 @@ const txId = await client.standard.createTransaction({
 const escrowId = await client.standard.linkEscrow(txId);
 
 // Wait for delivery... then release
+// Mock mode: no attestation needed
 await client.standard.releaseEscrow(escrowId);
+// Testnet/Mainnet with EAS: attestation REQUIRED
+// await client.standard.releaseEscrow(escrowId, { txId, attestationUID: '0x...' });
 ```
 
 ---
@@ -194,13 +225,17 @@ import { ACTPClient, X402Adapter } from '@agirails/sdk';
 const client = await ACTPClient.create({ mode: 'mainnet' });
 
 // Register x402 adapter (not registered by default)
-client.registerAdapter(new X402Adapter(await client.getAddress(), {
+client.registerAdapter(new X402Adapter(client.getAddress(), {
   expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+  // Provide your own USDC transfer function (signer = your ethers.Wallet)
+  transferFn: async (to, amount) => {
+    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
+    return (await usdc.transfer(to, amount)).hash;
+  },
 }));
 
 // Pay via URL (auto-routes to x402)
-await client.pay('https://provider.example.com/api/endpoint', { amount: 0.50 });
+await client.pay({ to: 'https://provider.example.com/api/endpoint', amount: 0.50 });
 
 // Or via client.basic.pay
 const result = await client.basic.pay({
@@ -209,7 +244,7 @@ const result = await client.basic.pay({
 });
 
 console.log(result.response?.status); // 200
-console.log(result.fee);              // { grossAmount, providerNet, platformFee, feeBps }
+console.log(result.feeBreakdown);     // { grossAmount, providerNet, platformFee, feeBps }
 // No release() needed -- x402 is atomic (instant settlement)
 ```
 
@@ -244,17 +279,21 @@ await client.basic.pay({ to: '0xProviderAddress', amount: '5' });
 
 // x402 -- requires registering the adapter first
 import { X402Adapter } from '@agirails/sdk';
-client.registerAdapter(new X402Adapter(await client.getAddress(), {
+client.registerAdapter(new X402Adapter(client.getAddress(), {
   expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+  // Provide your own USDC transfer function (signer = your ethers.Wallet)
+  transferFn: async (to, amount) => {
+    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
+    return (await usdc.transfer(to, amount)).hash;
+  },
 }));
 await client.basic.pay({ to: 'https://api.provider.com/service', amount: '1' });
 
 // ERC-8004 -- requires bridge configuration
-import { ERC8004Bridge } from '@agirails/sdk/erc8004';
-const identity = new ERC8004Bridge(provider, signer);
-const profile = await identity.resolve(agentId);
-await client.basic.pay({ to: profile.owner, amount: '5', erc8004AgentId: agentId });
+import { ERC8004Bridge } from '@agirails/sdk';
+const bridge = new ERC8004Bridge({ network: 'base-sepolia' });
+const agent = await bridge.resolveAgent(agentId);
+await client.basic.pay({ to: agent.wallet, amount: '5' });
 ```
 
 You can also force a specific adapter via metadata:
@@ -274,19 +313,25 @@ await client.basic.pay({
 On-chain portable identity for agents. Replaces the deprecated DID:ethr system.
 
 ```typescript
-import { ERC8004Bridge } from '@agirails/sdk/erc8004';
+import { ERC8004Bridge } from '@agirails/sdk';
 
-const identity = new ERC8004Bridge(provider, signer);
+// Read-only bridge for resolving agents from ERC-8004 Identity Registry
+const bridge = new ERC8004Bridge({ network: 'base-sepolia' });
 
-// Register identity
-await identity.register({ name: 'my-agent', capabilities: ['code-review'] });
+// Resolve agent by ID
+const agent = await bridge.resolveAgent('12345');
+console.log(agent.name);           // 'my-agent'
+console.log(agent.wallet);         // payment address
+console.log(agent.capabilities);   // ['code-review']
 
-// Resolve agent
-const profile = await identity.resolve(agentId);
-console.log(profile.name);         // 'my-agent'
-console.log(profile.wallet);       // payment address
-console.log(profile.capabilities); // ['code-review']
+// Verify agent exists
+const exists = await bridge.verifyAgent('12345');
+
+// Get wallet for payment
+const wallet = await bridge.getAgentWallet('12345');
 ```
+
+> **Note:** Agent registration is done via `actp publish` (writes to AgentRegistry v2 contract), not through ERC8004Bridge which is read-only.
 
 **ERC-8004 Registries (canonical CREATE2, same address all chains):**
 
@@ -529,29 +574,28 @@ This enables:
 
 ```typescript
 import {
-  InsufficientBalanceError,
+  InsufficientFundsError,
   InvalidAddressError,
   InvalidStateTransitionError,
   TransactionNotFoundError,
   DeadlineExpiredError,
-  NotAuthorizedError,
 } from '@agirails/sdk';
 
 try {
   await client.basic.pay({...});
 } catch (error) {
-  if (error instanceof InsufficientBalanceError) {
-    console.log('Need more USDC:', error.required, 'have:', error.available);
+  if (error instanceof InsufficientFundsError) {
+    // details: { required: string (wei), available: string (wei) }
+    console.log('Need more USDC:', error.details.required, 'have:', error.details.available);
   } else if (error instanceof InvalidAddressError) {
-    console.log('Bad address:', error.address);
+    console.log('Bad address:', error.message);
   } else if (error instanceof InvalidStateTransitionError) {
-    console.log('Cannot transition from', error.currentState, 'to', error.targetState);
+    // details: { from: string, to: string, validTransitions: string[] }
+    console.log('Cannot transition from', error.details.from, 'to', error.details.to);
   } else if (error instanceof DeadlineExpiredError) {
     console.log('Deadline has passed, create a new transaction');
   } else if (error instanceof TransactionNotFoundError) {
-    console.log('Transaction not found:', error.txId);
-  } else if (error instanceof NotAuthorizedError) {
-    console.log('Not authorized for this action');
+    console.log('Transaction not found:', error.details.txId);
   } else {
     throw error;
   }
@@ -787,9 +831,13 @@ await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
 // Error: No adapter found for URL target
 
 // CORRECT - register adapter first
-client.registerAdapter(new X402Adapter(await client.getAddress(), {
+client.registerAdapter(new X402Adapter(client.getAddress(), {
   expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+  // Provide your own USDC transfer function (signer = your ethers.Wallet)
+  transferFn: async (to, amount) => {
+    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
+    return (await usdc.transfer(to, amount)).hash;
+  },
 }));
 await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
 ```
@@ -802,7 +850,7 @@ await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
 |----------|------|-----------------|
 | Wallet setup | Random address generated | Generate new or bring your own key |
 | USDC | `actp init` mints 10,000 test USDC | Real USDC (testnet faucet or bridge) |
-| Escrow release | `request()` auto-releases after dispute window | **Manual `release()` required** |
+| Escrow release | `request()` auto-releases; `client.pay()` requires manual `releaseEscrow()` | **Manual `releaseEscrow()` required** |
 | Gas fees | None (simulated) | EOA: real ETH. Auto wallet (`wallet: 'auto'`): gasless via paymaster |
 | Transaction limit | None | $1,000 per tx (mainnet) |
 
@@ -825,7 +873,7 @@ await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
 ## Cross-References
 
 - **OpenClaw Skill**: Full agent templates, onboarding wizard, OpenClaw integration
-- **Python SDK**: See `agirails-python` skill for Python-specific patterns
+- **Python SDK**: Coming soon (full rewrite in progress)
 - **n8n Node**: `n8n-nodes-actp` for no-code workflow integration
 - **SDK Examples**: https://github.com/agirails/sdk-examples
 

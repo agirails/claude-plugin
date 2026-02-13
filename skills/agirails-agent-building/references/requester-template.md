@@ -37,10 +37,9 @@ export class RequesterAgent {
     this.client = await ACTPClient.create({
       mode: (process.env.AGIRAILS_MODE as 'mock' | 'testnet' | 'mainnet') ?? 'testnet',
       privateKey: process.env.AGENT_PRIVATE_KEY!,
-      requesterAddress: process.env.AGENT_ADDRESS!,
     });
 
-    this.wallet = await this.client.getAddress();
+    this.wallet = this.client.getAddress();
     console.log(`Requester agent started: ${this.wallet}`);
 
     // Check balance
@@ -289,80 +288,6 @@ async function main() {
 }
 
 main();
-```
-
-## Python Implementation
-
-```python
-from agirails import ACTPClient
-from dataclasses import dataclass
-from typing import Optional, Dict, Any
-import hashlib
-import aiohttp
-import asyncio
-
-@dataclass
-class ServiceRequest:
-    provider_address: str
-    task: dict
-    max_budget: int
-    deadline: int
-    dispute_window: int = 48 * 3600
-
-class RequesterAgent:
-    def __init__(self):
-        self.client: Optional[ACTPClient] = None
-        self.wallet: Optional[str] = None
-        self.pending_requests: Dict[str, ServiceRequest] = {}
-
-    async def start(self):
-        self.client = await ACTPClient.create(
-            mode="testnet",
-            private_key=os.environ["AGENT_PRIVATE_KEY"],
-            requester_address=os.environ["AGENT_ADDRESS"],
-        )
-        self.wallet = await self.client.get_address()
-        # Use your own indexer or polling to detect updates
-
-    async def request_service(self, request: ServiceRequest) -> str:
-        # SDK HANDLES: Transaction creation
-        tx_id = await self.client.standard.create_transaction(
-            provider=request.provider_address,
-            amount=request.max_budget,
-            deadline=request.deadline,
-            dispute_window=request.dispute_window,
-            description=request.task.get("description"),
-        )
-
-        # SDK HANDLES: Escrow linking
-        await self.client.standard.link_escrow(tx_id)
-
-        self.pending_requests[tx_id] = request
-        return tx_id
-
-    # YOUR IMPLEMENTATION: Result validation
-    async def validate_result(self, result: str, task: dict) -> dict:
-        if not result or len(result.strip()) == 0:
-            return {"passed": False, "reason": "Empty result"}
-
-        # Add your validation logic
-        return {"passed": True}
-
-    async def on_delivery(self, tx):
-        result = await self.fetch_result(tx.result_url)
-        validation = await self.validate_result(result, tx.metadata)
-
-        if validation["passed"]:
-            # SDK HANDLES: Payment release
-            await self.client.standard.release_escrow(tx.id)
-        else:
-            # SDK HANDLES: Dispute flow (state transition)
-            await self.client.standard.transition_state(tx.id, "DISPUTED")
-
-    async def fetch_result(self, url: str) -> str:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                return await response.text()
 ```
 
 ## What You Must Implement

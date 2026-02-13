@@ -41,10 +41,9 @@ export class ProviderAgent {
     this.client = await ACTPClient.create({
       mode: (process.env.AGIRAILS_MODE as 'mock' | 'testnet' | 'mainnet') ?? 'testnet',
       privateKey: process.env.AGENT_PRIVATE_KEY!,
-      requesterAddress: process.env.AGENT_ADDRESS!,
     });
 
-    this.wallet = await this.client.getAddress();
+    this.wallet = this.client.getAddress();
     console.log(`Provider agent started: ${this.wallet}`);
     console.log(`Service: ${this.config.name}`);
 
@@ -262,90 +261,6 @@ const agent = new ProviderAgent({
 });
 
 agent.start();
-```
-
-## Python Implementation
-
-```python
-from agirails import ACTPClient
-from eth_abi import encode
-from dataclasses import dataclass
-from typing import Optional, Dict, Any
-import hashlib
-import asyncio
-
-@dataclass
-class ServiceConfig:
-    name: str
-    description: str
-    price_per_unit: int  # In USDC smallest units (6 decimals)
-    unit: str  # 'word', 'token', 'request', 'hour'
-    max_concurrent_jobs: int
-
-class ProviderAgent:
-    def __init__(self, config: ServiceConfig):
-        self.config = config
-        self.client: Optional[ACTPClient] = None
-        self.wallet: Optional[str] = None
-        self.active_jobs: Dict[str, Any] = {}
-
-    async def start(self):
-        # SDK handles: wallet connection, contract initialization
-        self.client = await ACTPClient.create(
-            mode="testnet",
-            private_key=os.environ["AGENT_PRIVATE_KEY"],
-            requester_address=os.environ["AGENT_ADDRESS"],
-        )
-        self.wallet = await self.client.get_address()
-        print(f"Provider agent started: {self.wallet}")
-
-        # Use your own indexer or polling to detect new txIds,
-        # then call handle_request(tx) with your own transaction payload.
-
-    # YOUR IMPLEMENTATION: Pricing
-    def calculate_quote(self, metadata: dict) -> int:
-        if self.config.unit == "word":
-            words = len(metadata.get("text", "").split())
-            return self.config.price_per_unit * words
-        return self.config.price_per_unit
-
-    # YOUR IMPLEMENTATION: Service logic
-    async def perform_service(self, metadata: dict) -> str:
-        # Your service implementation
-        raise NotImplementedError("Implement your service")
-
-    # YOUR IMPLEMENTATION: Result storage
-    async def store_result(self, result: str) -> tuple[str, str]:
-        result_hash = "0x" + hashlib.sha256(result.encode()).hexdigest()
-        result_url = await self.upload_to_ipfs(result)
-        return result_hash, result_url
-
-    async def handle_request(self, tx):
-        quote = self.calculate_quote(tx.metadata)
-
-        # SDK HANDLES: State transition
-        quote_proof = "0x" + encode(["uint256"], [quote]).hex()
-        await self.client.standard.transition_state(tx.id, "QUOTED", quote_proof)
-
-    async def execute_job(self, tx):
-        # SDK HANDLES: State transition (IN_PROGRESS required before DELIVERED)
-        await self.client.standard.transition_state(tx.id, "IN_PROGRESS")
-
-        # YOUR LOGIC: Do the work
-        result = await self.perform_service(tx.metadata)
-
-        # Get dispute window for proof encoding
-        dispute_window = tx.dispute_window or 172800  # default 2 days
-
-        # Encode dispute window as proof (ABI-encoded uint256)
-        from eth_abi import encode
-        proof = "0x" + encode(["uint256"], [dispute_window]).hex()
-
-        # SDK HANDLES: Delivery with dispute window proof
-        await self.client.standard.transition_state(tx.id, "DELIVERED", proof)
-
-    async def upload_to_ipfs(self, content: str) -> str:
-        raise NotImplementedError("Implement IPFS upload")
 ```
 
 ## What You Must Implement

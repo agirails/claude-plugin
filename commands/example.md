@@ -1,5 +1,5 @@
 ---
-description: Generate runnable code examples for common ACTP use cases. Automatically adapts to project language and SDK version.
+description: Generate runnable TypeScript code examples for common ACTP use cases.
 allowed-tools:
   - Read
   - Glob
@@ -14,25 +14,13 @@ Generate ready-to-run code examples for AGIRAILS SDK integration.
 
 ## What This Command Does
 
-1. Detect project language (TypeScript or Python)
-2. Show available use cases
-3. Generate complete, runnable code example
-4. Optionally save to file
+1. Show available use cases
+2. Generate complete, runnable code example
+3. Optionally save to file
 
 ## Step-by-Step Instructions
 
-### Step 1: Detect Language
-
-Check project files:
-```
-Glob("package.json")     → TypeScript
-Glob("pyproject.toml")   → Python
-Glob("requirements.txt") → Python
-```
-
-If ambiguous, ask user.
-
-### Step 2: Select Use Case
+### Step 1: Select Use Case
 
 If argument provided, match against known use cases.
 
@@ -48,7 +36,7 @@ Options:
   [Agent Integration] - Integrate with AI agent framework
 ```
 
-### Step 3: Generate Example
+### Step 2: Generate Example
 
 #### Basic Payment (TypeScript)
 
@@ -77,7 +65,7 @@ async function main() {
 
   // 1. Create client in mock mode (no real funds needed)
   const client = await ACTPClient.create({ mode: 'mock' });
-  const myAddress = await client.getAddress();
+  const myAddress = client.getAddress();
   console.log('✓ Client created in mock mode\n');
 
   // 2. Mint test USDC (mock mode only)
@@ -121,81 +109,6 @@ async function main() {
 main().catch(console.error);
 ```
 
-#### Basic Payment (Python)
-
-```python
-"""
-AGIRAILS Basic Payment Example
-
-This example demonstrates the simplest payment flow:
-1. Create client
-2. Make payment
-3. Provider delivers
-4. Release funds
-
-Run: python basic_payment.py
-"""
-
-import asyncio
-from eth_abi import encode
-from agirails import ACTPClient
-
-# Configuration
-REQUESTER_ADDRESS = "0x1111111111111111111111111111111111111111"
-PROVIDER_ADDRESS = "0x2222222222222222222222222222222222222222"
-PAYMENT_AMOUNT = 10.00  # USDC
-
-
-async def main():
-    print("=== AGIRAILS Basic Payment ===\n")
-
-    # 1. Create client in mock mode (no real funds needed)
-    client = await ACTPClient.create(mode="mock")
-    my_address = await client.get_address()
-    print("✓ Client created in mock mode\n")
-
-    # 2. Mint test USDC (mock mode only)
-    # Mint uses USDC amount (will be converted to wei)
-    await client.mint_tokens(my_address, 1000)
-    balance = await client.get_balance(my_address)
-    print(f"✓ Balance: {balance} USDC\n")
-
-    # 3. Create payment
-    result = await client.basic.pay({
-        "to": PROVIDER_ADDRESS,
-        "amount": PAYMENT_AMOUNT,
-        "deadline": "24h",
-        "description": "AI code review service",
-    })
-    print("✓ Payment created")
-    print(f"  Transaction ID: {result.tx_id}")
-    print(f"  State: {result.state}")
-    print("")
-
-    # 4. Simulate provider delivering
-    # IN_PROGRESS is REQUIRED before DELIVERED
-    await client.standard.transition_state(result.tx_id, "IN_PROGRESS")
-    # DELIVERED requires ABI-encoded dispute window proof
-    proof = "0x" + encode(["uint256"], [172800]).hex()  # 2 days
-    await client.standard.transition_state(result.tx_id, "DELIVERED", proof)
-    print("✓ Provider delivered\n")
-
-    # 5. Release payment (after dispute window)
-    await client.runtime.time.advance_time(172801)  # 2 days + 1s
-    await client.standard.release_escrow(result.tx_id)
-    print("✓ Payment released to provider\n")
-
-    # 6. Verify final state
-    status = await client.basic.check_status(result.tx_id)
-    print(f"Final state: {status.state}\n")
-
-    print("=== Example Complete ===")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
 #### Full Lifecycle (TypeScript)
 
 ```typescript
@@ -219,10 +132,10 @@ async function main() {
 
   // Create clients for both parties (mock mode assigns random addresses)
   const requesterClient = await ACTPClient.create({ mode: 'mock' });
-  const REQUESTER = await requesterClient.getAddress();
+  const REQUESTER = requesterClient.getAddress();
 
   const providerClient = await ACTPClient.create({ mode: 'mock' });
-  const PROVIDER = await providerClient.getAddress();
+  const PROVIDER = providerClient.getAddress();
 
   // Mint tokens (USDC wei): 1000 USDC = 1_000_000_000
   await requesterClient.mintTokens(REQUESTER, '1000000000');
@@ -309,7 +222,7 @@ async function main() {
   console.log('=== AGIRAILS Dispute Handling ===\n');
 
   const client = await ACTPClient.create({ mode: 'mock' });
-  const myAddress = await client.getAddress();
+  const myAddress = client.getAddress();
 
   // Setup: Create and complete a transaction
   // Mint uses USDC wei (6 decimals): 1000 USDC = 1_000_000_000
@@ -402,7 +315,7 @@ async function main() {
 main().catch(console.error);
 ```
 
-### Step 4: Save to File (Optional)
+### Step 3: Save to File (Optional)
 
 After generating example:
 ```
@@ -415,23 +328,19 @@ Options:
 
 If saving:
 ```bash
-# TypeScript
 Write to: examples/agirails-basic-payment.ts
-
-# Python
-Write to: examples/agirails_basic_payment.py
 ```
 
-### Step 5: Next Steps
+### Step 4: Next Steps
 
 After generating:
 ```
 Example generated!
 
 To run this example:
-1. Install SDK: npm install @agirails/sdk (or pip install agirails)
+1. Install SDK: npm install @agirails/sdk
 2. Save the code to a file
-3. Run: npx ts-node <filename>.ts (or python <filename>.py)
+3. Run: npx ts-node <filename>.ts
 
 Try more examples:
 - /agirails:example full-lifecycle

@@ -39,8 +39,7 @@ Agent ID (number)    -> Resolves via ERC-8004 -> ACTP escrow
 
 Verify SDK is installed:
 ```
-TypeScript: Check for node_modules/@agirails/sdk
-Python: Check if agirails is importable
+Check for node_modules/@agirails/sdk
 ```
 
 If not installed:
@@ -176,48 +175,25 @@ async function createX402Payment() {
   });
 
   // Register x402 adapter for URL-based payments
-  client.registerAdapter(new X402Adapter(await client.getAddress(), {
+  client.registerAdapter(new X402Adapter(client.getAddress(), {
     expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-    transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+    // Provide your own USDC transfer function (signer = your ethers.Wallet)
+    transferFn: async (to, amount) => {
+      const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
+      return (await usdc.transfer(to, amount)).hash;
+    },
   }));
 
-  const result = await client.pay('https://api.example.com/translate', {
+  const result = await client.pay({
+    to: 'https://api.example.com/translate',
     amount: 0.50,
-    payload: { text: 'Hello world', targetLang: 'es' },
+    input: { text: 'Hello world', targetLang: 'es' },
   });
 
-  console.log('Response:', result.data);
+  console.log('Response:', result.response);
 }
 
 createX402Payment().catch(console.error);
-```
-
-**ACTP Escrow Payment (Python):**
-```python
-import asyncio
-from agirails import ACTPClient
-
-async def create_payment():
-    # Keystore auto-detected from .actp/keystore.json
-    client = await ACTPClient.create(
-        mode="mock",  # Change to 'testnet' or 'mainnet' for real transactions
-    )
-
-    result = await client.basic.pay({
-        "to": "0xProviderAddress",
-        "amount": 100.00,
-        "deadline": "24h",
-    })
-
-    print("Payment created!")
-    print(f"Transaction ID: {result.tx_id}")
-    print(f"State: {result.state}")
-    print(f"Amount: {result.amount}")
-
-    return result
-
-if __name__ == "__main__":
-    asyncio.run(create_payment())
 ```
 
 ### Step 5: Next Steps
@@ -227,9 +203,9 @@ if __name__ == "__main__":
 Payment code generated!
 
 To execute:
-1. Save the code to a file (e.g., pay.ts or pay.py)
+1. Save the code to a file (e.g., pay.ts)
 2. Set ACTP_KEY_PASSWORD in your environment
-3. Run: npx ts-node pay.ts (or python pay.py)
+3. Run: npx ts-node pay.ts
 
 After payment is created:
 - Monitor with: /agirails:status <txId>

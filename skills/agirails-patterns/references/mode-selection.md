@@ -20,15 +20,7 @@ const client = await ACTPClient.create({
   mode: 'mock',
   stateDirectory: '.actp', // Optional, default
 });
-const myAddress = await client.getAddress();
-```
-
-```python
-client = await ACTPClient.create(
-    mode="mock",
-    state_directory=".actp",  # Optional
-)
-my_address = await client.get_address()
+const myAddress = client.getAddress();
 ```
 
 ### Features
@@ -90,13 +82,6 @@ const client = await ACTPClient.create({
 });
 ```
 
-```python
-# Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD env var
-client = await ACTPClient.create(
-    mode="testnet",
-)
-```
-
 ### Requirements
 
 **1. Test ETH for Gas**
@@ -118,7 +103,7 @@ Options:
 npx ethers-cli wallet random
 
 # Store in .env
-PRIVATE_KEY=0x...
+ACTP_PRIVATE_KEY=0x...
 ```
 
 ### Contract Addresses (Base Sepolia)
@@ -157,13 +142,6 @@ const addresses = {
 const client = await ACTPClient.create({
   mode: 'mainnet',
 });
-```
-
-```python
-# Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD env var
-client = await ACTPClient.create(
-    mode="mainnet",
-)
 ```
 
 ### Requirements

@@ -60,7 +60,7 @@ Help developers write comprehensive tests that ensure their AGIRAILS integration
 ```typescript
 // __tests__/actp.test.ts
 import { ACTPClient, IMockRuntime } from '@agirails/sdk';
-import { InsufficientBalanceError, InvalidStateTransitionError } from '@agirails/sdk';
+import { InsufficientFundsError, InvalidStateTransitionError } from '@agirails/sdk';
 import { ethers } from 'ethers';
 
 describe('ACTP Integration', () => {
@@ -83,36 +83,6 @@ describe('ACTP Integration', () => {
 
   // Tests go here...
 });
-```
-
-#### Python (pytest)
-
-```python
-# tests/test_actp.py
-import pytest
-from agirails import ACTPClient
-from agirails.errors import InsufficientBalanceError, InvalidStateTransitionError
-
-REQUESTER = "0x1111111111111111111111111111111111111111"
-PROVIDER = "0x2222222222222222222222222222222222222222"
-
-
-@pytest.fixture
-async def client():
-    client = await ACTPClient.create(
-        mode="mock",
-
-    )
-    yield client
-
-
-@pytest.fixture(autouse=True)
-async def setup(client):
-    await client.reset()
-    await client.mint_tokens(REQUESTER, 10000)
-
-
-# Tests go here...
 ```
 
 ### Happy Path Tests
@@ -188,7 +158,7 @@ describe('Error Handling', () => {
         amount: 100.00,
         deadline: '+24h',
       })
-    ).rejects.toThrow(InsufficientBalanceError);
+    ).rejects.toThrow(InsufficientFundsError);
   });
 
   it('should reject invalid state transition', async () => {

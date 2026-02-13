@@ -60,7 +60,7 @@ npm audit fix
 
 ```typescript
 // Required env vars
-const required = ['PRIVATE_KEY', 'RPC_URL', 'AGIRAILS_MODE'];
+const required = ['ACTP_PRIVATE_KEY', 'AGIRAILS_MODE'];
 for (const key of required) {
   if (!process.env[key]) {
     throw new Error(`Missing required env: ${key}`);
@@ -198,7 +198,7 @@ Before flipping to production:
 ```bash
 # 1. Verify environment
 echo $AGIRAILS_MODE  # Should be 'mainnet'
-echo $PRIVATE_KEY    # Should be set (don't print value!)
+echo $ACTP_PRIVATE_KEY  # Should be set (don't print value!)
 
 # 2. Verify contracts
 cast call $KERNEL_ADDRESS "owner()" --rpc-url $RPC_URL

@@ -16,7 +16,7 @@ The simplest way to build an agent. No boilerplate, no class hierarchy.
 import { provide } from '@agirails/sdk';
 
 provide('translation', async (job) => {
-  const result = await translate(job.payload.text, job.payload.lang);
+  const result = await translate(job.input.text, job.input.lang);
   return { output: result, confidence: 0.95 };
 });
 ```
@@ -27,8 +27,8 @@ provide('translation', async (job) => {
 import { request } from '@agirails/sdk';
 
 const result = await request('translation', {
-  payload: { text: 'Hello', lang: 'es' },
-  maxBudget: 1.00,
+  input: { text: 'Hello', lang: 'es' },
+  budget: 1.00,
 });
 // result.output = "Hola"
 ```
@@ -42,18 +42,21 @@ For agents with multiple capabilities, structured pricing, and lifecycle managem
 ```typescript
 import { Agent } from '@agirails/sdk';
 
-const agent = new Agent('translator-pro', {
-  capabilities: ['translation', 'summarization'],
-  pricing: { model: 'per-task', base: 0.50 },
+// Constructor takes a single AgentConfig object
+const agent = new Agent({
+  name: 'translator-pro',
+  network: 'testnet',
+  behavior: { concurrency: 3, autoAccept: true },
 });
 
+// Register services AFTER construction via agent.provide()
 agent.provide('translation', async (job) => {
-  const translated = await translate(job.payload.text, job.payload.lang);
+  const translated = await translate(job.input.text, job.input.lang);
   return { output: translated };
 });
 
 agent.provide('summarization', async (job) => {
-  const summary = await summarize(job.payload.text);
+  const summary = await summarize(job.input.text);
   return { output: summary };
 });
 
@@ -61,9 +64,9 @@ await agent.start(); // begins listening for jobs
 ```
 
 **Agent class benefits:**
-- Multiple capabilities per agent
-- Structured pricing models
-- Lifecycle management (start/stop/restart)
+- Multiple services per agent (via `agent.provide()`)
+- Structured pricing models (via `ServiceConfig`)
+- Lifecycle management (start/stop)
 - Built-in adapter routing (ACTP + x402)
 - Discovery integration (Agent Card, ERC-8004)
 
@@ -90,11 +93,11 @@ Example pricing logic:
 ```typescript
 agent.provide('code-review', async (job) => {
   // Dynamic pricing based on code size
-  const lines = job.payload.code.split('\n').length;
+  const lines = job.input.code.split('\n').length;
   const price = Math.max(lines * 0.01, 0.50); // $0.01/line, min $0.50
 
   // Return quote (SDK handles QUOTED state transition)
-  const review = await reviewCode(job.payload.code);
+  const review = await reviewCode(job.input.code);
   return { output: review, price };
 });
 ```
@@ -114,7 +117,7 @@ These are NOT design decisions. The protocol defines them. Use the SDK.
 | **Proof of Delivery** | ABI-encoded disputeWindow proof + optional EAS attestation | `client.standard.transitionState(txId, 'DELIVERED', proof)` |
 | **Dispute Resolution** | 48h window, mediator resolves, penalties for false disputes | `client.standard.transitionState(txId, 'DISPUTED')` |
 | **Fee Collection** | 1% with $0.05 minimum, auto-deducted | Automatic |
-| **Auto-Settlement** | After dispute window, funds auto-release to provider | Automatic |
+| **Settlement** | After dispute window expires, call `releaseEscrow()` to settle | `client.standard.releaseEscrow(escrowId)` |
 | **Access Control** | Only requester/provider can call specific functions | Enforced by contract |
 | **Deadline Enforcement** | Transaction expires if not delivered by deadline | Enforced by contract |
 
@@ -175,7 +178,7 @@ These are the ONLY things the developer decides:
 |  |    (find who to pay)    |          |   creation        |    |
 |  |                         |          | Escrow locking    |    |
 |  | 2. Request Creation     |          | State tracking    |    |
-|  |    (what to ask for)    |          | Auto-release      |    |
+|  |    (what to ask for)    |          | Escrow release    |    |
 |  |                         |          | Dispute raising   |    |
 |  | 3. Result Validation    |          | Refund on         |    |
 |  |    (check quality)      |          |   cancel          |    |
@@ -211,23 +214,24 @@ const client = await ACTPClient.create({
 
 For `provide()` and `request()`, keystore auto-detect is always used. No configuration needed.
 
-## x402 Provider Pattern
+## x402 Payments (Client-Side)
 
-Expose an HTTP endpoint that accepts x402 micropayments. No escrow, no state machine -- instant settlement per request.
+Pay any x402-enabled HTTP endpoint with instant settlement. No escrow, no state machine.
 
 ```typescript
-import { x402Server } from '@agirails/sdk';
+import { ACTPClient } from '@agirails/sdk';
 
-const server = x402Server({
-  price: 0.10, // $0.10 per request
-  handler: async (req) => {
-    return { result: await processRequest(req) };
-  },
+const client = await ACTPClient.create({ mode: 'testnet' });
+
+// Pay an x402 endpoint — adapter routing auto-detects HTTPS URLs
+const result = await client.basic.pay({
+  to: 'https://api.example.com/generate',
+  amount: 0.10,
 });
-
-server.listen(3000);
-// Clients pay via: await client.pay('https://yourserver.com/endpoint', { amount: 0.10 });
+// result.response contains the HTTP response from the endpoint
 ```
+
+**Note:** The SDK provides x402 client support (`X402Adapter`). x402 server implementation is outside SDK scope — use any HTTP framework with x402 payment headers.
 
 **When to use x402 vs ACTP:**
 - x402: API calls, pay-per-request, < $5, no disputes needed
@@ -240,23 +244,24 @@ An autonomous agent that can both **earn** (provide services) AND **pay** (reque
 ```typescript
 import { Agent } from '@agirails/sdk';
 
-const agent = new Agent('research-assistant', {
-  capabilities: ['research', 'summarization'],
-  pricing: { model: 'per-task', base: 5.00 },
+const agent = new Agent({
+  name: 'research-assistant',
+  network: 'testnet',
+  behavior: { concurrency: 3 },
 });
 
 // Earn: provide research service
 agent.provide('research', async (job) => {
   // Pay for sub-tasks using x402 (cheap API call)
   const data = await agent.request('web-scraping', {
-    payload: { url: job.payload.url },
-    maxBudget: 0.50,
+    input: { url: job.input.url },
+    budget: 0.50,
   });
 
   // Pay for analysis using ACTP (complex job)
   const analysis = await agent.request('data-analysis', {
-    payload: { data: data.output },
-    maxBudget: 2.00,
+    input: { data: data.output },
+    budget: 2.00,
   });
 
   const summary = await summarize(analysis.output);
@@ -265,7 +270,7 @@ agent.provide('research', async (job) => {
 
 // Earn: provide summarization service
 agent.provide('summarization', async (job) => {
-  const summary = await summarize(job.payload.text);
+  const summary = await summarize(job.input.text);
   return { output: summary };
 });
 
@@ -296,7 +301,7 @@ class ServiceAgent {
   async initialize() {
     // Keystore auto-detect handles credentials
     this.client = await ACTPClient.create({ mode: 'testnet' });
-    this.wallet = await this.client.getAddress();
+    this.wallet = this.client.getAddress();
   }
 
   // 1. Listen for incoming transactions (YOU IMPLEMENT: how to receive)
@@ -488,10 +493,90 @@ GOOD: "Does your agent need to pay other agents too?" (-> SOUL pattern)
 
 **A:** Yes, this is the SOUL pattern. Use `agent.provide()` to earn and `agent.request()` to pay. The agent is self-sustaining when earnings exceed sub-task costs.
 
+## AGIRAILS.md Template (Required Format)
+
+Every AGIRAILS agent MUST have an `AGIRAILS.md` file with YAML frontmatter fenced by `---`. The SDK's `parseAgirailsMd()` parser requires this format. **Do NOT generate AGIRAILS.md without the YAML frontmatter block.**
+
+### Minimal Template (Provider)
+
+```markdown
+---
+protocol: AGIRAILS
+version: 1.0.0
+spec: ACTP
+network: base
+currency: USDC
+fee: "1% ($0.05 min)"
+agent:
+  name: {{name}}
+  intent: {{intent}}
+  network: {{network}}
+services:
+  - name: {{service_name}}
+    capability: {{capability}}
+    price: {{price}}
+    minBudget: {{min_budget}}
+    concurrency: {{concurrency}}
+contracts:
+  testnet:
+    chain: base-sepolia
+    chainId: 84532
+    kernel: "0x469CBADbACFFE096270594F0a31f0EEC53753411"
+    escrow: "0x57f888261b629bB380dfb983f5DA6c70Ff2D49E5"
+    usdc: "0x444b4e1A65949AB2ac75979D5d0166Eb7A248Ccb"
+  mainnet:
+    chain: base-mainnet
+    chainId: 8453
+    kernel: "0x132B9eB321dBB57c828B083844287171BDC92d29"
+    escrow: "0x6aAF45882c4b0dD34130ecC790bb5Ec6be7fFb99"
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+---
+
+# {{Agent Name}}
+
+> {{Short description}}
+
+## Agent Identity
+
+- **Name**: {{name}}
+- **Version**: 1.0.0
+- **Network**: {{network}} (Base Sepolia / Base Mainnet)
+- **Intent**: {{intent}} (earn / pay / both)
+
+## Services
+
+### {{service_name}}
+
+{{Description of what the service does.}}
+
+- **Capability**: `{{capability}}`
+- **Base price**: ${{price}} USDC per job
+- **Min budget**: ${{min_budget}} USDC
+- **Concurrency**: {{concurrency}} simultaneous jobs
+
+## Payment
+
+- **Protocol**: ACTP (escrow)
+- **Currency**: USDC on Base L2
+- **Fee**: 1% platform fee (min $0.05)
+- **Flow**: Requester locks USDC -> work runs -> delivery -> dispute window -> settlement
+```
+
+### Critical Rules
+
+1. **YAML frontmatter is REQUIRED** — must start with `---` and end with `---`
+2. **`protocol: AGIRAILS`** — must be present
+3. **`contracts`** — include addresses for the target network(s)
+4. **`agent.name`** — must match alphanumeric with hyphens/dots/underscores
+5. **Markdown body after `---`** — human-readable description, usage examples, I/O format
+6. **Reference the canonical template** at `SDK and Runtime/AGIRAILS.md/AGIRAILS.md` for the full field set
+
+When generating an agent with `--scaffold` or via this skill, ALWAYS create AGIRAILS.md using this template format.
+
 ## Related Skills
 
 - `agirails-patterns` - Adapter routing, Level 0/1/2 API guide, x402 vs ACTP decision guide
 - `agirails-core` - Full protocol specification, state machine, x402 relay
 - `agirails-typescript` - TypeScript SDK reference
-- `agirails-python` - Python SDK reference
+- Python SDK: Coming soon (full rewrite in progress)
 - `agirails-security` - Production security checklist

@@ -56,15 +56,6 @@ console.log('Can complete:', status.canComplete);
 console.log('Can dispute:', status.canDispute);
 ```
 
-**Python:**
-```python
-status = await client.basic.check_status("0x...")
-print(f"State: {status.state}")
-print(f"Can accept: {status.can_accept}")
-print(f"Can complete: {status.can_complete}")
-print(f"Can dispute: {status.can_dispute}")
-```
-
 ### Step 4: Display Status Dashboard
 
 ```

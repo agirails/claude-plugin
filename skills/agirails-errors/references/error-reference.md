@@ -11,18 +11,14 @@ ACTPError (base)
 │   ├── InsufficientFundsError      Code: INSUFFICIENT_FUNDS
 │   ├── TransactionNotFoundError    Code: TRANSACTION_NOT_FOUND
 │   ├── DeadlineExpiredError        Code: DEADLINE_EXPIRED
-│   ├── EscrowNotFoundError         Code: ESCROW_NOT_FOUND (Python)
-│   ├── DeadlinePassedError         Code: DEADLINE_PASSED (Python)
-│   ├── DisputeWindowActiveError    Code: DISPUTE_WINDOW_ACTIVE (Python)
-│   └── ContractPausedError         Code: CONTRACT_PAUSED (Python)
-│
-├── State Machine Errors
 │   └── InvalidStateTransitionError Code: INVALID_STATE_TRANSITION
 │
 ├── Validation Errors
 │   ├── ValidationError             Code: VALIDATION_ERROR
 │   ├── InvalidAddressError         Code: VALIDATION_ERROR
-│   └── InvalidAmountError          Code: VALIDATION_ERROR
+│   ├── InvalidAmountError          Code: VALIDATION_ERROR
+│   ├── InvalidCIDError             Code: VALIDATION_ERROR
+│   └── InvalidArweaveTxIdError     Code: VALIDATION_ERROR
 │
 ├── Network Errors
 │   ├── NetworkError                Code: NETWORK_ERROR
@@ -31,7 +27,6 @@ ACTPError (base)
 │
 ├── Storage Errors (IPFS/Arweave)
 │   ├── StorageError                Code: STORAGE_ERROR
-│   ├── InvalidCIDError             Code: VALIDATION_ERROR
 │   ├── UploadTimeoutError          Code: STORAGE_ERROR
 │   ├── DownloadTimeoutError        Code: STORAGE_ERROR
 │   ├── FileSizeLimitExceededError  Code: STORAGE_ERROR
@@ -41,7 +36,6 @@ ACTPError (base)
 │   ├── ArweaveUploadError          Code: STORAGE_ERROR
 │   ├── ArweaveDownloadError        Code: STORAGE_ERROR
 │   ├── ArweaveTimeoutError         Code: STORAGE_ERROR
-│   ├── InvalidArweaveTxIdError     Code: VALIDATION_ERROR
 │   ├── InsufficientBalanceError    Code: STORAGE_ERROR (Irys)
 │   └── SwapExecutionError          Code: STORAGE_ERROR
 │
@@ -55,49 +49,37 @@ ACTPError (base)
 │   ├── AgentLifecycleError         Code: AGENT_LIFECYCLE_ERROR
 │   └── QueryCapExceededError       Code: QUERY_CAP_EXCEEDED
 │
-└── Mock Errors (Python only)
-    ├── MockStateCorruptedError
-    ├── MockStateVersionError
-    └── MockStateLockError
+└── (all inherit code, message, details)
 ```
 
 ---
 
 ## Transaction Errors
 
-### InsufficientFundsError / InsufficientBalanceError
+### InsufficientFundsError
 
-**When:** Not enough USDC to complete payment.
+**When:** Not enough USDC to complete payment (testnet/mainnet).
 
-**TypeScript:**
 ```typescript
 import { InsufficientFundsError } from '@agirails/sdk';
-
-import { ethers } from 'ethers';
 
 try {
   await client.basic.pay({ to, amount: 1000 });
 } catch (error) {
   if (error instanceof InsufficientFundsError) {
-    console.log('Required:', error.details.required);   // "1000000000"
-    console.log('Available:', error.details.available); // "500000000"
-    // Mint more test USDC in mock mode
+    console.log('Required:', error.details.required);   // "1000000000" (wei)
+    console.log('Available:', error.details.available); // "500000000" (wei)
+  }
+  // Mock mode throws a different error (InsufficientBalanceError) — check by name:
+  if (error.name === 'InsufficientBalanceError') {
+    console.log('Required:', error.required);   // string wei
+    console.log('Available:', error.available); // string wei
     await client.mintTokens(address, '1000000000');
   }
 }
 ```
 
-**Python:**
-```python
-from agirails import InsufficientBalanceError
-
-try:
-    await client.basic.pay({"to": to, "amount": 1000})
-except InsufficientBalanceError as e:
-    print(f"Required: {e.details['required']}")   # "1000000000"
-    print(f"Available: {e.details['available']}") # "500000000"
-    await client.mint_tokens(address, 1000)
-```
+> **Note:** In mock mode, insufficient USDC throws `InsufficientBalanceError` (from MockRuntime, extends plain `Error`). On testnet/mainnet, it throws `InsufficientFundsError` (extends `ACTPError`). For cross-mode compatibility, check `error.name` instead of `instanceof`. The storage `InsufficientBalanceError` (from `errors/index.ts`, extends `StorageError`) is a separate class for Irys/Arweave balance.
 
 ### TransactionNotFoundError
 
@@ -297,7 +279,7 @@ try {
 import { request, NoProviderFoundError } from '@agirails/sdk';
 
 try {
-  await request({ service: 'rare-service', input: {} });
+  await request('rare-service', { input: {} });
 } catch (error) {
   if (error instanceof NoProviderFoundError) {
     console.log('Service:', error.details.service);
@@ -312,7 +294,7 @@ try {
 
 ```typescript
 try {
-  await request({ service: 'image-gen', input: {}, maxPrice: '0.01' });
+  await request('image-gen', { input: {}, budget: 0.01 });
 } catch (error) {
   if (error instanceof ProviderRejectedError) {
     console.log('Provider:', error.details.provider);
@@ -351,6 +333,11 @@ async function handlePayment(to: string, amount: number) {
   try {
     return await client.basic.pay({ to, amount });
   } catch (error) {
+    // Mock mode throws InsufficientBalanceError (plain Error), not ACTPError
+    if (error.name === 'InsufficientBalanceError') {
+      throw new Error('Please add more USDC (use client.mintTokens() in mock mode)');
+    }
+
     if (!(error instanceof ACTPError)) throw error;
 
     switch (error.code) {
@@ -396,32 +383,6 @@ async function withRetry<T>(
 
 // Usage
 const result = await withRetry(() => client.basic.pay({ to, amount }));
-```
-
-### Python Async Error Handling
-
-```python
-from agirails import (
-    ACTPError,
-    InsufficientBalanceError,
-    NetworkError,
-)
-import asyncio
-
-async def handle_payment(to: str, amount: float, retries: int = 3):
-    for attempt in range(retries):
-        try:
-            return await client.basic.pay({"to": to, "amount": amount})
-        except InsufficientBalanceError:
-            raise ValueError("Please add more USDC to your wallet")
-        except NetworkError:
-            if attempt < retries - 1:
-                await asyncio.sleep(2 ** attempt)
-                continue
-            raise
-        except ACTPError as e:
-            print(f"ACTP Error [{e.code}]: {e}")
-            raise
 ```
 
 ---

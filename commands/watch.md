@@ -70,8 +70,7 @@ const TERMINAL = new Set(['SETTLED', 'CANCELLED']);
 async function watchTransaction(txId: string) {
   const client = await ACTPClient.create({
     mode: 'testnet', // or 'mainnet'
-    privateKey: process.env.PRIVATE_KEY,
-    requesterAddress: '0xYourAddress',
+    privateKey: process.env.ACTP_PRIVATE_KEY,
   });
 
   let lastState = '';
@@ -94,38 +93,6 @@ async function watchTransaction(txId: string) {
 }
 
 watchTransaction('0xYourTransactionId').catch(console.error);
-```
-
-**Python:**
-```python
-import asyncio
-import os
-from datetime import datetime
-from agirails import ACTPClient
-
-TERMINAL = {"SETTLED", "CANCELLED"}
-
-async def watch_transaction(tx_id: str):
-    client = await ACTPClient.create(
-        mode="testnet",  # or 'mainnet'
-        private_key=os.environ["PRIVATE_KEY"],
-        requester_address=os.environ["REQUESTER_ADDRESS"],
-    )
-
-    last_state = ""
-    while True:
-        status = await client.basic.check_status(tx_id)
-        if status.state != last_state:
-            print(f"[{datetime.now().isoformat()}] {last_state} → {status.state}")
-            last_state = status.state
-
-        if status.state in TERMINAL:
-            print("✅ Transaction complete")
-            break
-
-        await asyncio.sleep(5)
-
-asyncio.run(watch_transaction("0xYourTransactionId"))
 ```
 
 ### Step 4: Advanced (On-Chain Events)

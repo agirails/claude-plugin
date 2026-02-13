@@ -48,7 +48,7 @@ Guide developers from zero to working AGIRAILS integration with personalized rec
 ### Phase 1: Discovery
 
 1. **Analyze project structure**
-   - Detect language (TypeScript/Python)
+   - Detect TypeScript/Node.js project
    - Identify frameworks (LangChain, Express, FastAPI, etc.)
    - Check existing dependencies
    - Review architecture patterns
@@ -141,7 +141,7 @@ let client: ACTPClient;
 export async function initPayments() {
   client = await ACTPClient.create({
     mode: process.env.NODE_ENV === 'production' ? 'mainnet' : 'mock',
-    privateKey: process.env.PRIVATE_KEY,
+    privateKey: process.env.ACTP_PRIVATE_KEY,
   });
 }
 
@@ -180,47 +180,6 @@ router.get('/payments/:id', async (req, res) => {
 });
 
 export default router;
-```
-
-#### For FastAPI/Python Integration
-
-```python
-# services/actp_service.py
-from agirails import ACTPClient
-from fastapi import HTTPException
-
-class ACTPService:
-    def __init__(self):
-        self.client = None
-
-    async def initialize(self, mode: str = "mock"):
-        # Keystore auto-detect: .actp/keystore.json + ACTP_KEY_PASSWORD
-        self.client = await ACTPClient.create(mode=mode)
-
-    async def create_payment(
-        self,
-        provider: str,
-        amount: float,
-        service: str,
-    ) -> dict:
-        if not self.client:
-            raise HTTPException(500, "ACTP client not initialized")
-
-        try:
-            result = await self.client.basic.pay({
-                "to": provider,
-                "amount": amount,
-                "deadline": "24h",
-                "description": service,
-            })
-            return {
-                "transaction_id": result.tx_id,
-                "state": result.state,
-            }
-        except Exception as e:
-            raise HTTPException(400, str(e))
-
-actp_service = ACTPService()
 ```
 
 ### Phase 4: Testing

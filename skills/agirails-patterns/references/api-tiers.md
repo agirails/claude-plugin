@@ -214,12 +214,12 @@ of the generic interface, so you may need to cast to `any` to access them.
 try {
   await client.basic.pay({...});
 } catch (error) {
-  if (error instanceof InsufficientBalanceError) {
+  if (error instanceof InsufficientFundsError) {
     console.log('Need more USDC');
   } else if (error instanceof InvalidAddressError) {
     console.log('Bad provider address');
-  } else if (error instanceof TransactionFailedError) {
-    console.log('On-chain error:', error.reason);
+  } else if (error instanceof TransactionRevertedError) {
+    console.log('On-chain error:', error.message);
   }
 }
 ```
@@ -236,7 +236,7 @@ try {
 } catch (error) {
   if (error instanceof InvalidStateTransitionError) {
     console.log('Cannot transition from', error.currentState);
-  } else if (error instanceof NotAuthorizedError) {
+  } else if (error instanceof TransactionRevertedError) {
     console.log('Only provider can deliver');
   }
 }

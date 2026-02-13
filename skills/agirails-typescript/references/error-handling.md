@@ -3,22 +3,30 @@
 ## Error Hierarchy
 
 ```
-ACTPError (base)
-├── ValidationError
+ACTPError (base — code, message, txHash?, details?)
+├── InsufficientFundsError         (INSUFFICIENT_FUNDS)
+├── TransactionNotFoundError       (TRANSACTION_NOT_FOUND)
+├── DeadlineExpiredError           (DEADLINE_EXPIRED)
+├── InvalidStateTransitionError    (INVALID_STATE_TRANSITION)
+├── SignatureVerificationError     (SIGNATURE_VERIFICATION_FAILED)
+├── TransactionRevertedError       (TRANSACTION_REVERTED)
+├── NetworkError                   (NETWORK_ERROR)
+├── NoProviderFoundError           (NO_PROVIDER_FOUND)
+├── TimeoutError                   (TIMEOUT)
+├── ProviderRejectedError          (PROVIDER_REJECTED)
+├── DeliveryFailedError            (DELIVERY_FAILED)
+├── DisputeRaisedError             (DISPUTE_RAISED)
+├── ServiceConfigError             (SERVICE_CONFIG_ERROR)
+├── AgentLifecycleError            (AGENT_LIFECYCLE_ERROR)
+├── QueryCapExceededError          (QUERY_CAP_EXCEEDED)
+├── ValidationError                (VALIDATION_ERROR)
 │   ├── InvalidAddressError
 │   ├── InvalidAmountError
-│   └── InvalidStateTransitionError
-├── StateError
-│   ├── TransactionNotFoundError
-│   ├── InvalidStateTransitionError
-│   └── DeadlineExpiredError
-├── AuthorizationError
-│   └── NotAuthorizedError
-├── BalanceError
-│   └── InsufficientBalanceError
-└── NetworkError
-    ├── RpcError
-    └── TransactionFailedError
+│   └── InvalidCIDError
+└── StorageError                   (STORAGE_ERROR)
+    ├── InsufficientBalanceError   (Irys/Arweave balance, NOT payment balance)
+    ├── ContentNotFoundError
+    └── ...other storage errors
 ```
 
 ## Importing Errors
@@ -26,36 +34,55 @@ ACTPError (base)
 ```typescript
 import {
   ACTPError,
-  ValidationError,
-  InvalidAddressError,
-  InvalidAmountError,
+  InsufficientFundsError,
   TransactionNotFoundError,
   InvalidStateTransitionError,
-  InsufficientBalanceError,
-  NotAuthorizedError,
   DeadlineExpiredError,
+  InvalidAddressError,
+  InvalidAmountError,
+  ValidationError,
   NetworkError,
+  NoProviderFoundError,
+  TimeoutError,
 } from '@agirails/sdk';
 ```
 
 ## Error Details
+
+All errors extend `ACTPError` with: `error.code`, `error.message`, `error.txHash?`, `error.details?`.
+
+### InsufficientFundsError
+
+Thrown when wallet doesn't have enough USDC for payment.
+
+```typescript
+// details: { required: string (wei), available: string (wei) }
+
+try {
+  await client.basic.pay({ to: '0x...', amount: 10000 });
+} catch (error) {
+  if (error instanceof InsufficientFundsError) {
+    console.log(`Need ${error.details.required} wei`);
+    console.log(`Have ${error.details.available} wei`);
+
+    // In mock mode, mint more
+    if (client.getMode() === 'mock') {
+      await client.mintTokens(client.getAddress(), error.details.required);
+    }
+  }
+}
+```
 
 ### InvalidAddressError
 
 Thrown when an Ethereum address is invalid.
 
 ```typescript
-interface InvalidAddressError extends ValidationError {
-  address: string;  // The invalid address
-  reason: string;   // 'not checksummed' | 'invalid format' | 'zero address'
-}
-
 try {
-  await client.basic.pay({ to: 'not-an-address', ... });
+  await client.basic.pay({ to: 'not-an-address', amount: 10 });
 } catch (error) {
   if (error instanceof InvalidAddressError) {
-    console.log(`Invalid address: ${error.address}`);
-    console.log(`Reason: ${error.reason}`);
+    console.log(error.message); // "Invalid Ethereum address: not-an-address"
   }
 }
 ```
@@ -65,18 +92,11 @@ try {
 Thrown when amount is invalid.
 
 ```typescript
-interface InvalidAmountError extends ValidationError {
-  amount: string;
-  reason: string;  // 'negative' | 'zero' | 'below minimum' | 'not a number'
-  minimum?: string;
-}
-
 try {
-  await client.basic.pay({ amount: '0.01', ... }); // Below $0.05 minimum
+  await client.basic.pay({ to: '0x...', amount: 0 });
 } catch (error) {
   if (error instanceof InvalidAmountError) {
-    console.log(`Amount ${error.amount} invalid: ${error.reason}`);
-    console.log(`Minimum: ${error.minimum}`);
+    console.log(error.message); // "Invalid amount: 0 (must be > 0)"
   }
 }
 ```
@@ -86,16 +106,13 @@ try {
 Thrown when transaction ID doesn't exist.
 
 ```typescript
-interface TransactionNotFoundError extends StateError {
-  txId: string;
-  mode: string;  // 'mock' | 'testnet' | 'mainnet'
-}
+// details: { txId: string }
 
 try {
   await client.basic.checkStatus('0xinvalid');
 } catch (error) {
   if (error instanceof TransactionNotFoundError) {
-    console.log(`Transaction ${error.txId} not found in ${error.mode}`);
+    console.log(`Transaction ${error.details.txId} not found`);
   }
 }
 ```
@@ -105,69 +122,14 @@ try {
 Thrown when state transition is not allowed.
 
 ```typescript
-interface InvalidStateTransitionError extends StateError {
-  txId: string;
-  currentState: TransactionState;
-  targetState: TransactionState;
-  allowedTransitions: TransactionState[];
-}
+// details: { from: string, to: string, validTransitions: string[] }
 
 try {
-  // Try to release before delivered
   await client.standard.releaseEscrow('0x...');
 } catch (error) {
   if (error instanceof InvalidStateTransitionError) {
-    console.log(`Cannot transition from ${error.currentState} to ${error.targetState}`);
-    console.log(`Allowed: ${error.allowedTransitions.join(', ')}`);
-  }
-}
-```
-
-### InsufficientBalanceError
-
-Thrown when wallet doesn't have enough funds.
-
-```typescript
-interface InsufficientBalanceError extends BalanceError {
-  required: string;   // Amount needed (including fee)
-  available: string;  // Current balance
-  token: string;      // 'USDC' or 'ETH'
-}
-
-try {
-  await client.basic.pay({ amount: '10000', ... });
-} catch (error) {
-  if (error instanceof InsufficientBalanceError) {
-    console.log(`Need ${error.required} ${error.token}`);
-    console.log(`Have ${error.available} ${error.token}`);
-
-    // In mock mode, mint more (required is in USDC wei)
-    if (client.getMode() === 'mock') {
-      await client.mintTokens(address, error.required);
-    }
-  }
-}
-```
-
-### NotAuthorizedError
-
-Thrown when caller is not authorized for action.
-
-```typescript
-interface NotAuthorizedError extends AuthorizationError {
-  txId: string;
-  action: string;      // 'release' | 'cancel' | 'transition'
-  caller: string;      // Address that tried to call
-  authorized: string;  // Address that should call
-}
-
-try {
-  // Provider tries to release (only requester can)
-  await client.standard.releaseEscrow('0x...');
-} catch (error) {
-  if (error instanceof NotAuthorizedError) {
-    console.log(`${error.caller} cannot ${error.action}`);
-    console.log(`Only ${error.authorized} can do this`);
+    console.log(`Cannot go from ${error.details.from} to ${error.details.to}`);
+    console.log(`Valid: ${error.details.validTransitions.join(', ')}`);
   }
 }
 ```
@@ -177,23 +139,31 @@ try {
 Thrown when deadline has passed.
 
 ```typescript
-interface DeadlineExpiredError extends StateError {
-  txId: string;
-  deadline: Date;
-  now: Date;
-}
-
-import { ethers } from 'ethers';
+// details: { txId: string, deadline: number }
 
 try {
   await client.standard.transitionState('0x...', 'IN_PROGRESS');
-  const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
-  await client.standard.transitionState('0x...', 'DELIVERED', proof);
 } catch (error) {
   if (error instanceof DeadlineExpiredError) {
-    console.log(`Deadline was ${error.deadline}`);
-    console.log(`Current time is ${error.now}`);
+    const deadlineDate = new Date(error.details.deadline * 1000);
+    console.log(`Deadline was ${deadlineDate.toISOString()}`);
     // Transaction can now be cancelled
+  }
+}
+```
+
+### NoProviderFoundError
+
+Thrown when `request()` cannot find any provider for the service.
+
+```typescript
+// details: { service: string }
+
+try {
+  const result = await request('rare-service', { input: { text: 'hello' }, budget: 5 });
+} catch (error) {
+  if (error instanceof NoProviderFoundError) {
+    console.log(`No providers for: ${error.details.service}`);
   }
 }
 ```
@@ -203,35 +173,37 @@ try {
 ```typescript
 import { ACTPError } from '@agirails/sdk';
 
-async function handlePayment(options: PayOptions) {
+async function handlePayment(options: BasicPayParams) {
   try {
     return await client.basic.pay(options);
   } catch (error) {
     if (!(error instanceof ACTPError)) {
-      // Unknown error, rethrow
       throw error;
     }
 
-    // Log for debugging
     console.error('ACTP Error:', {
       name: error.name,
       message: error.message,
       code: error.code,
     });
 
-    // Handle by type
     switch (error.code) {
-      case 'INSUFFICIENT_BALANCE':
-        return { error: 'insufficient_funds', details: error };
+      case 'INSUFFICIENT_FUNDS':
+        return { error: 'insufficient_funds', details: error.details };
 
       case 'INVALID_ADDRESS':
-        return { error: 'bad_address', details: error };
+      case 'VALIDATION_ERROR':
+        return { error: 'bad_input', details: error.details };
 
       case 'DEADLINE_EXPIRED':
-        return { error: 'too_late', details: error };
+        return { error: 'too_late', details: error.details };
+
+      case 'NETWORK_ERROR':
+      case 'TRANSACTION_REVERTED':
+        return { error: 'network_issue', details: error.details };
 
       default:
-        return { error: 'payment_failed', details: error };
+        return { error: 'payment_failed', details: error.details };
     }
   }
 }
@@ -241,10 +213,10 @@ async function handlePayment(options: PayOptions) {
 
 ```typescript
 async function payWithRetry(
-  options: PayOptions,
+  options: BasicPayParams,
   maxRetries = 3,
   delay = 1000
-): Promise<PayResult> {
+): Promise<BasicPayResult> {
   let lastError: Error;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -255,11 +227,6 @@ async function payWithRetry(
 
       // Don't retry validation errors
       if (error instanceof ValidationError) {
-        throw error;
-      }
-
-      // Don't retry authorization errors
-      if (error instanceof NotAuthorizedError) {
         throw error;
       }
 

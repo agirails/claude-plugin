@@ -205,18 +205,6 @@ console.log('Can complete:', status.canComplete);
 console.log('Can dispute:', status.canDispute);
 ```
 
-```python
-# Python
-tx = await client.standard.get_transaction(tx_id)
-print(f"State: {tx.state}")  # 'COMMITTED'
-
-# Check what actions are available
-status = await client.basic.check_status(tx_id)
-print(f"Can accept: {status.can_accept}")
-print(f"Can complete: {status.can_complete}")
-print(f"Can dispute: {status.can_dispute}")
-```
-
 ## Common Patterns
 
 ### Happy Path

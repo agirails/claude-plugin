@@ -1,5 +1,5 @@
 ---
-description: Initialize AGIRAILS SDK in the current project. Auto-detects language (TypeScript or Python), installs the SDK, creates configuration files, and generates an encrypted keystore.
+description: Initialize AGIRAILS SDK in the current project. Installs the TypeScript SDK, creates configuration files, and generates an encrypted keystore.
 allowed-tools:
   - Glob
   - Read
@@ -7,7 +7,7 @@ allowed-tools:
   - Edit
   - Bash
   - AskUserQuestion
-argument-hint: "[--lang ts|py] [--version x.x.x] [--scaffold]"
+argument-hint: "[--version x.x.x] [--scaffold]"
 ---
 
 # /agirails:init
@@ -16,47 +16,20 @@ Set up AGIRAILS SDK in the current project.
 
 ## What This Command Does
 
-1. Detect project language (TypeScript/Node.js or Python)
-2. Check if SDK is already installed
-3. Install the SDK using the appropriate package manager
-4. Create configuration directory (`.actp/`)
-5. Generate encrypted keystore (`.actp/keystore.json`)
-6. Create `.env.example` with required variables
-7. Update `.gitignore` to exclude sensitive files
-8. Show quickstart code example
+1. Check if SDK is already installed
+2. Install the SDK using the appropriate package manager
+3. Create configuration directory (`.actp/`)
+4. Generate encrypted keystore (`.actp/keystore.json`)
+5. Create `.env.example` with required variables
+6. Update `.gitignore` to exclude sensitive files
+7. Show quickstart code example
 
 ## Step-by-Step Instructions
 
-### Step 1: Detect Language
-
-Check for project configuration files:
-
-```
-Glob("package.json")     -> TypeScript/Node.js project
-Glob("pyproject.toml")   -> Python project (modern)
-Glob("requirements.txt") -> Python project (traditional)
-```
-
-If multiple found, prefer in order: package.json > pyproject.toml > requirements.txt
-
-If none found, ask the user:
-```
-"No project configuration found. What language are you using?"
-Options: [TypeScript/Node.js] [Python]
-```
-
-### Step 2: Check Existing Installation
-
-**TypeScript:**
+### Step 1: Check Existing Installation
 ```bash
 # Check if already installed
 ls node_modules/@agirails/sdk 2>/dev/null && echo "installed" || echo "not installed"
-```
-
-**Python:**
-```bash
-# Check if already installed
-pip show agirails 2>/dev/null && echo "installed" || echo "not installed"
 ```
 
 If already installed, inform user and ask:
@@ -65,9 +38,7 @@ If already installed, inform user and ask:
 Options: [Skip installation] [Reinstall] [Upgrade to latest]
 ```
 
-### Step 3: Detect Package Manager
-
-**TypeScript:**
+### Step 2: Detect Package Manager
 ```
 Glob("pnpm-lock.yaml")   -> use pnpm
 Glob("yarn.lock")        -> use yarn
@@ -75,17 +46,7 @@ Glob("package-lock.json") -> use npm
 Default                   -> use npm
 ```
 
-**Python:**
-```
-Glob("poetry.lock")      -> use poetry
-Glob("uv.lock")          -> use uv
-Glob("Pipfile")          -> use pipenv
-Default                   -> use pip
-```
-
-### Step 4: Install SDK
-
-**TypeScript:**
+### Step 3: Install SDK
 ```bash
 # npm
 npm install @agirails/sdk
@@ -97,24 +58,12 @@ yarn add @agirails/sdk
 pnpm add @agirails/sdk
 ```
 
-**Python:**
-```bash
-# pip
-pip install agirails
-
-# poetry
-poetry add agirails
-
-# uv
-uv add agirails
-```
-
 If installation fails, show the error and suggest:
 - Check internet connection
 - Try manual installation
 - Check permissions
 
-### Step 5: Create Configuration and Keystore
+### Step 4: Create Configuration and Keystore
 
 Create `.actp/` directory:
 ```bash
@@ -147,6 +96,50 @@ actp init --scaffold
 #     └── agent.ts         <- Starter agent code
 ```
 
+**CRITICAL: AGIRAILS.md MUST have YAML frontmatter.** The SDK's `parseAgirailsMd()` requires `---` fenced YAML. Generate AGIRAILS.md using this structure:
+
+```markdown
+---
+protocol: AGIRAILS
+version: 1.0.0
+spec: ACTP
+network: base
+currency: USDC
+fee: "1% ($0.05 min)"
+agent:
+  name: {{name}}
+  intent: {{intent}}
+  network: {{network}}
+services:
+  - name: {{service_name}}
+    capability: {{capability}}
+    price: {{price}}
+    minBudget: {{min_budget}}
+    concurrency: {{concurrency}}
+contracts:
+  testnet:
+    chain: base-sepolia
+    chainId: 84532
+    kernel: "0x469CBADbACFFE096270594F0a31f0EEC53753411"
+    escrow: "0x57f888261b629bB380dfb983f5DA6c70Ff2D49E5"
+    usdc: "0x444b4e1A65949AB2ac75979D5d0166Eb7A248Ccb"
+  mainnet:
+    chain: base-mainnet
+    chainId: 8453
+    kernel: "0x132B9eB321dBB57c828B083844287171BDC92d29"
+    escrow: "0x6aAF45882c4b0dD34130ecC790bb5Ec6be7fFb99"
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+---
+
+# {{Agent Name}}
+
+> {{Short description}}
+
+(... markdown body with services, payment, usage examples ...)
+```
+
+Fill `{{placeholders}}` from user's onboarding answers. See `agirails-agent-building` skill for the full template and the canonical template at `SDK and Runtime/AGIRAILS.md/AGIRAILS.md`.
+
 Create `.env.example`:
 ```env
 # AGIRAILS SDK Configuration
@@ -166,7 +159,7 @@ AGIRAILS_MODE=mock
 # BASE_MAINNET_RPC=https://...
 ```
 
-### Step 6: Update .gitignore
+### Step 5: Update .gitignore
 
 Check if `.gitignore` exists. If not, create it.
 
@@ -179,9 +172,7 @@ Add these entries if not present:
 .env.*.local
 ```
 
-### Step 7: Show Quickstart
-
-**TypeScript:**
+### Step 6: Show Quickstart
 ```typescript
 import { ACTPClient } from '@agirails/sdk';
 
@@ -211,37 +202,7 @@ async function main() {
 main().catch(console.error);
 ```
 
-**Python:**
-```python
-import asyncio
-from agirails import ACTPClient
-
-async def main():
-    # Create client in mock mode (no blockchain needed)
-    # Keystore auto-detected from .actp/keystore.json
-    client = await ACTPClient.create(mode="mock")
-
-    # Check balance
-    balance = await client.get_balance()
-    print(f"Balance: {balance} USDC")
-
-    # Mint test tokens (mock mode only)
-    await client.mint_tokens(client.get_address(), 1000)
-
-    # Create a payment
-    result = await client.basic.pay({
-        "to": "0xProviderAddress",
-        "amount": 10.00,
-        "deadline": "24h",
-    })
-
-    print(f"Transaction ID: {result.tx_id}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-### Step 8: Show Next Steps
+### Step 7: Show Next Steps
 
 ```
 SDK installed successfully!
@@ -266,7 +227,7 @@ Need help? Ask: "How do I integrate AGIRAILS into my agent?"
 
 | Error | Resolution |
 |-------|------------|
-| No package manager found | Guide user to install npm/pip |
+| No package manager found | Guide user to install npm |
 | Installation fails | Show error, suggest manual install |
 | Permission denied | Suggest sudo or fix permissions |
 | Network error | Check internet, try again |
@@ -274,12 +235,11 @@ Need help? Ask: "How do I integrate AGIRAILS into my agent?"
 
 ## Command Arguments
 
-- `--lang ts` or `--lang py`: Skip language detection
 - `--version x.x.x`: Install specific version
 - `--scaffold`: Create full project scaffold with AGIRAILS.md and starter code
 
 Example:
 ```
-/agirails:init --lang ts --version 3.0.0
+/agirails:init --version 3.0.0
 /agirails:init --scaffold
 ```

@@ -6,6 +6,32 @@ description: This skill provides knowledge about the ACTP (Agent Commerce Transa
 
 The Agent Commerce Transaction Protocol (ACTP) is a blockchain-based payment protocol designed for AI agent commerce. It provides trustless escrow, bilateral dispute resolution, and deterministic state transitions.
 
+## Quickstart (Copy-Paste-Run)
+
+```bash
+npm install @agirails/sdk
+```
+
+Save as `quickstart.js` and run with `node quickstart.js`:
+
+```javascript
+const { ACTPClient } = require('@agirails/sdk');
+
+async function main() {
+  const client = await ACTPClient.create({ mode: 'mock' });
+  await client.mintTokens(client.getAddress(), '10000000000'); // 10,000 USDC
+  const result = await client.pay({
+    to: '0x0000000000000000000000000000000000000001',
+    amount: '5.00', // 5 USDC (human-readable, not wei)
+  });
+  console.log('Payment:', result.txId, '| State:', result.state);
+}
+
+main().catch(console.error);
+```
+
+No wallet, no keys, no blockchain needed. Replace `mock` with `testnet` or `mainnet` when ready.
+
 ## Protocol Overview
 
 ACTP enables AI agents to pay each other for services with guaranteed delivery or refund. The protocol runs on Base (Ethereum L2) using USDC stablecoin.
@@ -125,9 +151,7 @@ Escrow is the heart of ACTP. Funds are locked in the EscrowVault contract and on
 - **Release**: On SETTLED, the provider receives the escrowed amount minus the platform fee. Fee goes to ArchiveTreasury.
 - **Refund**: On CANCELLED (from INITIATED, COMMITTED, or IN_PROGRESS), the full escrowed amount returns to the requester.
 
-**Important runtime differences:**
-- Mock mode: Auto-releases after dispute window expires
-- Testnet / Mainnet: You MUST call `release()` explicitly to settle
+**Important:** Level 2 (`client.pay()`, `client.basic.pay()`) always requires explicit `releaseEscrow()` — in ALL modes. Level 0 `request()` auto-releases in mock mode only; on testnet/mainnet you must call `release()` manually.
 
 ## Fee Structure
 
@@ -173,13 +197,17 @@ x402 is an HTTP-native payment protocol for instant, one-request-one-response pa
 import { X402Adapter } from '@agirails/sdk';
 
 // Register the adapter
-client.registerAdapter(new X402Adapter(await client.getAddress(), {
+client.registerAdapter(new X402Adapter(client.getAddress(), {
   expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+  // Provide your own USDC transfer function (signer = your ethers.Wallet)
+  transferFn: async (to, amount) => {
+    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
+    return (await usdc.transfer(to, amount)).hash;
+  },
 }));
 
 // Pay via URL (adapter auto-routes to x402)
-await client.pay('https://provider.example.com/api/endpoint', { amount: 0.50 });
+await client.pay({ to: 'https://provider.example.com/api/endpoint', amount: 0.50 });
 ```
 
 ## Adapter Routing
@@ -213,13 +241,16 @@ ERC-8004 provides portable, cross-marketplace agent identity and reputation. It 
 
 These are canonical CREATE2 addresses (same on all chains).
 
-Register via `@agirails/sdk/erc8004`:
+Resolve agents via the ERC-8004 bridge (read-only):
 ```
-import { ERC8004Bridge } from '@agirails/sdk/erc8004';
+import { ERC8004Bridge } from '@agirails/sdk';
 
-const identity = new ERC8004Bridge(provider, signer);
-await identity.register({ name: 'my-agent', capabilities: ['code-review'] });
+const bridge = new ERC8004Bridge({ network: 'base-sepolia' });
+const agent = await bridge.resolveAgent('12345');
+console.log(agent.wallet); // payment address
 ```
+
+Agent registration is done via `actp publish` (writes to AgentRegistry v2), not through ERC8004Bridge.
 
 ## Config Management
 
@@ -260,7 +291,7 @@ Capabilities describe what an agent can do. They are declared in AGIRAILS.md and
 |----------|------|-------------------|----------------|
 | Wallet | Random in-memory address | Generate keystore or BYOK | Generate keystore or BYOK |
 | USDC | `actp init` mints 10,000 MockUSDC | MockUSDC (faucet) | Real USDC (Circle) |
-| Escrow release | Auto after dispute window | Manual `release()` required | Manual `release()` required |
+| Escrow release | `request()` auto-releases; `client.pay()` manual | Manual `release()` required | Manual `release()` required |
 | Gas | None (simulated) | Sepolia ETH for gas (or gasless with `wallet:'auto'`) | Base ETH for gas (or gasless with `wallet:'auto'`) |
 | Transaction limit | None | None | $1,000 per tx |
 | Chain | In-memory | Base Sepolia (84532) | Base Mainnet (8453) |
@@ -287,7 +318,7 @@ For detailed invariant specifications with code examples, see `references/invari
 
 **Deadline:** Maximum time for provider to deliver. If deadline passes before DELIVERED state, requester can cancel.
 
-**Dispute Window:** Time after DELIVERED state during which requester can raise dispute. Default is 48 hours. After window expires, funds auto-release to provider.
+**Dispute Window:** Time after DELIVERED state during which requester can raise dispute. Default is 48 hours. After window expires, requester can call `releaseEscrow()` to settle payment to provider.
 
 ```
 Transaction Created
@@ -441,8 +472,8 @@ Common protocol errors to handle:
 |-------|-------|------------|
 | InvalidStateTransition | Wrong current state | Check state before transition |
 | DeadlineExpired | Past deadline | Create new transaction |
-| InsufficientBalance | Not enough USDC | Fund wallet or mint in mock |
-| NotAuthorized | Wrong caller | Use correct account |
+| InsufficientFunds | Not enough USDC | Fund wallet or mint in mock |
+| TransactionReverted | Wrong caller or unauthorized | Check account and permissions |
 | DisputeWindowActive | Too early to finalize | Wait for window to close |
 | ConfigDriftDetected | Local != on-chain config | Run `actp publish` or `actp pull` |
 | AdapterNotRegistered | Missing adapter for route | Register required adapter |
@@ -454,7 +485,7 @@ Common protocol errors to handle:
 - Invariant specifications: `references/invariants.md`
 - SDK patterns and adapter routing: See `agirails-patterns` skill
 - TypeScript SDK reference: See `agirails-typescript` skill
-- Python SDK reference: See `agirails-python` skill
+- Python SDK: Coming soon (full rewrite in progress)
 - Building agents (provide/request/Agent): See `agirails-agent-building` skill
 - Security checklist: See `agirails-security` skill
 - Error reference: See `agirails-errors` skill

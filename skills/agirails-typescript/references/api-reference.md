@@ -9,27 +9,26 @@ Factory method to create a client instance.
 ```typescript
 interface ACTPClientConfig {
   mode: 'mock' | 'testnet' | 'mainnet';
-  requesterAddress: string;           // Required - your Ethereum address
-  privateKey?: string;                // Required for testnet/mainnet
-  rpcUrl?: string;                    // Optional, has defaults
-  stateDirectory?: string;            // Mock mode state persistence
+  privateKey?: string;                // Optional — keystore auto-detect is default
+  rpcUrl?: string;                    // Optional, has defaults per network
+  stateDirectory?: string;            // Mock mode state persistence (.actp/)
   contracts?: {                       // Contract address overrides
     actpKernel?: string;
     escrowVault?: string;
     usdc?: string;
+    agentRegistry?: string;
   };
   gasSettings?: {
     maxFeePerGas?: bigint;
     maxPriorityFeePerGas?: bigint;
   };
+  wallet?: 'auto';                  // Enable Smart Wallet + Paymaster (Tier 1 Auto)
   easConfig?: EASConfig;            // Optional EAS config (testnet/mainnet)
   requireAttestation?: boolean;    // Require attestation on releaseEscrow
 }
 
-const client = await ACTPClient.create({
-  mode: 'mock',
-  requesterAddress: '0x1234567890123456789012345678901234567890',
-});
+// Keystore auto-detect: checks ACTP_PRIVATE_KEY env → .actp/keystore.json + ACTP_KEY_PASSWORD
+const client = await ACTPClient.create({ mode: 'mock' });
 ```
 
 ### Properties
@@ -78,13 +77,18 @@ interface BasicPayParams {
   disputeWindow?: number;      // Seconds (default: 172800 = 2 days)
 }
 
-interface BasicPayResult {
-  txId: string;        // Transaction ID (bytes32)
-  provider: string;    // Provider address
-  requester: string;   // Requester address
-  amount: string;      // Formatted: "100.00 USDC"
-  deadline: string;    // ISO 8601 timestamp
-  state: string;       // 'COMMITTED'
+// client.basic.pay() returns UnifiedPayResult (superset of BasicPayResult)
+interface UnifiedPayResult {
+  txId: string;              // Transaction ID (bytes32)
+  escrowId: string | null;   // Escrow ID — needed for releaseEscrow()
+  adapter: string;           // Which adapter handled it ('actp', 'x402')
+  state: string;             // 'COMMITTED'
+  success: boolean;          // Whether payment initiation succeeded
+  amount: string;            // Formatted: "100.00 USDC"
+  releaseRequired: boolean;  // Always true for ACTP — must call releaseEscrow()
+  response?: Response;       // x402 only: HTTP response
+  feeBreakdown?: object;     // x402 only: fee details
+  error?: string;            // Error message if failed
 }
 
 const result = await client.basic.pay({
@@ -130,6 +134,7 @@ interface StandardTransactionParams {
   deadline?: string | number;  // Defaults to +24h
   disputeWindow?: number;      // Defaults to 172800 (2 days)
   serviceDescription?: string;
+  agentId?: string;            // ERC-8004 agent ID (for reputation tracking)
 }
 
 const txId = await client.standard.createTransaction({
@@ -254,25 +259,23 @@ Simple provide/request interface for service discovery.
 ```typescript
 import { provide, request, serviceDirectory } from '@agirails/sdk';
 
-// Register as a provider
-const cleanup = await provide({
-  service: 'image-generation',
-  endpoint: 'https://my-agent.com/generate',
-  price: '10.00',
+// Register as a provider — provide(service, handler, options?)
+const provider = provide('image-generation', async (job) => {
+  const image = await generateImage(job.input.prompt);
+  return { image };
 });
 
-// Request a service
-const result = await request({
-  service: 'image-generation',
+// Request a service — request(service, options)
+const { result, transaction } = await request('image-generation', {
   input: { prompt: 'A sunset over mountains' },
-  maxPrice: '15.00',
+  budget: 15.00,
 });
+// transaction = { id, provider, amount, fee, duration, proof }
+// To release payment: await client.standard.releaseEscrow(transaction.id)
 
 // Query service directory
-const providers = await serviceDirectory.find({
-  service: 'image-generation',
-  maxPrice: '20.00',
-});
+const providers = serviceDirectory.findProviders('image-generation');
+// Returns string[] of provider addresses
 ```
 
 ---
@@ -284,20 +287,19 @@ Higher-level Agent class for autonomous operation.
 ```typescript
 import { Agent, calculatePrice } from '@agirails/sdk';
 
+// Constructor takes AgentConfig (single object, no services array)
 const agent = new Agent({
   name: 'my-image-agent',
-  services: [{
-    name: 'generate',
-    handler: async (job) => {
-      const result = await generateImage(job.input);
-      return { image: result };
-    },
-    pricing: {
-      base: '5.00',
-      perUnit: '0.10',
-      unit: 'image',
-    },
-  }],
+  network: 'testnet',
+  behavior: { concurrency: 3, autoAccept: true },
+});
+
+// Register services AFTER construction via agent.provide()
+agent.provide('generate', async (job) => {
+  const result = await generateImage(job.input);
+  return { image: result };
+}, {
+  pricing: { base: 5.00, perUnit: 0.10, unit: 'image' },
 });
 
 await agent.start();
@@ -319,14 +321,15 @@ ACTPError (base)
 ├── Validation Errors
 │   ├── ValidationError
 │   ├── InvalidAddressError
-│   └── InvalidAmountError
+│   ├── InvalidAmountError
+│   ├── InvalidCIDError
+│   └── InvalidArweaveTxIdError
 ├── Network Errors
 │   ├── NetworkError
 │   ├── TransactionRevertedError
 │   └── SignatureVerificationError
 ├── Storage Errors
 │   ├── StorageError
-│   ├── InvalidCIDError
 │   ├── UploadTimeoutError
 │   ├── DownloadTimeoutError
 │   ├── FileSizeLimitExceededError
@@ -336,7 +339,6 @@ ACTPError (base)
 │   ├── ArweaveUploadError
 │   ├── ArweaveDownloadError
 │   ├── ArweaveTimeoutError
-│   ├── InvalidArweaveTxIdError
 │   ├── InsufficientBalanceError (Irys)
 │   └── SwapExecutionError
 ├── Agent/Job Errors
@@ -368,6 +370,8 @@ import {
   ValidationError,              // Input validation failed
   InvalidAddressError,          // Bad Ethereum address format
   InvalidAmountError,           // Invalid amount (<=0, wrong format)
+  InvalidCIDError,              // Invalid IPFS CID format (extends ValidationError)
+  InvalidArweaveTxIdError,      // Bad Arweave transaction ID (extends ValidationError)
 
   // Network
   NetworkError,                 // RPC/network connection issues
@@ -381,7 +385,6 @@ import {
 ```typescript
 import {
   StorageError,                 // Base storage error
-  InvalidCIDError,              // Invalid IPFS CID format
   UploadTimeoutError,           // Upload timed out
   DownloadTimeoutError,         // Download timed out
   FileSizeLimitExceededError,   // File too large
@@ -391,7 +394,6 @@ import {
   ArweaveUploadError,           // Arweave upload failed
   ArweaveDownloadError,         // Arweave download failed
   ArweaveTimeoutError,          // Arweave operation timeout
-  InvalidArweaveTxIdError,      // Bad Arweave transaction ID
   InsufficientBalanceError,     // Not enough Irys balance
   SwapExecutionError,           // Token swap failed
 } from '@agirails/sdk';

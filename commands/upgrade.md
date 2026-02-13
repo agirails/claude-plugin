@@ -171,14 +171,14 @@ try {
 }
 
 // NEW (2.0)
-import { InsufficientBalanceError } from '@agirails/sdk';
+import { InsufficientFundsError } from '@agirails/sdk';
 
 try {
   await client.basic.pay(...);
 } catch (e) {
-  if (e instanceof InsufficientBalanceError) {
-    console.log('Need:', e.required);
-    console.log('Have:', e.available);
+  if (e instanceof InsufficientFundsError) {
+    console.log('Need:', e.details.required);
+    console.log('Have:', e.details.available);
   }
 }
 ```

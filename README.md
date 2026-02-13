@@ -82,7 +82,6 @@ Skills load automatically when you discuss related topics:
 |-------|-------------|
 | **agirails-core** | Protocol, state machine, escrow, contracts, fees |
 | **agirails-typescript** | TypeScript SDK, `@agirails/sdk`, Node.js integration |
-| **agirails-python** | Python SDK, `agirails` package, asyncio patterns |
 | **agirails-patterns** | API tiers (Level 0/1/2), adapter routing, mode selection |
 | **agirails-agent-building** | Provider/requester setup, SOUL pattern, pricing model |
 | **agirails-security** | Key management, production checklist, security audit |
@@ -105,7 +104,7 @@ Agents handle complex, multi-step tasks autonomously:
 | **Cost to start** | Free | Free (1,000 USDC minted during registration) | Real USDC |
 | **Gas** | Simulated | Gas sponsored | Gas sponsored |
 | **USDC** | 10,000 auto-minted | 1,000 minted gaslessly on registration | bridge.base.org |
-| **Escrow** | Auto-releases | Manual `release()` | Manual `release()` |
+| **Escrow** | `request()` auto-releases; `client.pay()` manual | Manual `releaseEscrow()` | Manual `releaseEscrow()` |
 | **Tx limit** | None | None | $1,000 |
 
 ## Requirements

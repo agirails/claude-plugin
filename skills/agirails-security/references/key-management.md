@@ -12,7 +12,7 @@ No real key needed. SDK generates a random address.
 
 ```typescript
 const client = await ACTPClient.create({ mode: 'mock' });
-const myAddress = await client.getAddress();
+const myAddress = client.getAddress();
 ```
 
 ### Testing (Testnet)
@@ -28,7 +28,7 @@ npx ethers-cli wallet random
 # Private Key: 0x123...
 
 # Store in .env
-echo "PRIVATE_KEY=0x123..." >> .env.test
+echo "ACTP_PRIVATE_KEY=0x123..." >> .env.test
 ```
 
 ```typescript
@@ -51,7 +51,7 @@ Multiple options, ordered by security level:
 
 ```bash
 # Set in environment
-export PRIVATE_KEY=0x...
+export ACTP_PRIVATE_KEY=0x...
 ```
 
 ```typescript
@@ -304,7 +304,7 @@ throw new Error(`Failed with key ${privateKey}`);
 
 ```typescript
 // CORRECT: Environment variable
-const privateKey = process.env.PRIVATE_KEY;
+const privateKey = process.env.ACTP_PRIVATE_KEY;
 
 // CORRECT: Secrets manager
 const privateKey = await secretsManager.getSecret('pk');

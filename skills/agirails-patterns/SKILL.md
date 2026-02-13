@@ -6,6 +6,55 @@ description: This skill provides guidance on AGIRAILS SDK usage patterns when th
 
 The AGIRAILS SDK provides a multi-level API with intelligent adapter routing. Payments are routed automatically based on the `to` parameter, so you pick the right level of abstraction for your needs and the SDK handles the rest.
 
+## Quickstart (Copy-Paste-Run)
+
+Install and run in 30 seconds — no wallet, no keys, no config:
+
+```bash
+npm install @agirails/sdk
+```
+
+Save as `quickstart.js` and run with `node quickstart.js`:
+
+```javascript
+const { ACTPClient } = require('@agirails/sdk');
+
+async function main() {
+  // Create client in mock mode (no blockchain, no keys needed)
+  const client = await ACTPClient.create({ mode: 'mock' });
+  console.log('Address:', client.getAddress());
+
+  // Mint test USDC (mock only — starts with 0 balance)
+  await client.mintTokens(client.getAddress(), '10000000000'); // 10,000 USDC
+  const balance = await client.getBalance(client.getAddress());
+  console.log('Balance:', balance, 'wei (', Number(balance) / 1e6, 'USDC)');
+
+  // Pay a provider (escrow flow)
+  const result = await client.pay({
+    to: '0x0000000000000000000000000000000000000001',
+    amount: '5.00', // 5 USDC (human-readable, not wei)
+  });
+  console.log('Payment created:', result.txId);
+  console.log('State:', result.state); // COMMITTED
+  console.log('Escrow ID:', result.escrowId);
+  console.log('Release required:', result.releaseRequired);
+}
+
+main().catch(console.error);
+```
+
+**Output:**
+```
+Address: 0x... (random mock address)
+Balance: 10000000000 wei ( 10000 USDC)
+Payment created: 0x... (transaction hash)
+State: COMMITTED
+Escrow ID: 0x...
+Release required: true
+```
+
+**Next steps:** Replace `mock` with `testnet` (add `ACTP_PRIVATE_KEY` env var) or `mainnet` for production.
+
 ## Adapter Routing (Most Important Pattern)
 
 The SDK inspects the `to` parameter and routes to the correct payment adapter automatically:
@@ -18,21 +67,26 @@ The SDK inspects the `to` parameter and routes to the correct payment adapter au
 
 ```typescript
 // ACTP escrow (default) - address detected, routes to ACTP
-await client.pay('0xProviderAddress', { amount: 10.00 });
+await client.pay({ to: '0xProviderAddress', amount: 10.00 });
 
 // x402 instant (requires adapter) - URL detected, routes to x402
 import { X402Adapter } from '@agirails/sdk';
-client.registerAdapter(new X402Adapter(await client.getAddress(), {
+client.registerAdapter(new X402Adapter(client.getAddress(), {
   expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+  // Provide your own USDC transfer function (signer = your ethers.Wallet)
+  transferFn: async (to, amount) => {
+    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
+    return (await usdc.transfer(to, amount)).hash;
+  },
 }));
-await client.pay('https://api.example.com/translate', { amount: 0.50 });
+await client.pay({ to: 'https://api.example.com/translate', amount: 0.50 });
 
-// ERC-8004 (resolve agent ID to address) - number detected, resolves via registry
-await client.pay(42, { amount: 5.00 }); // resolves agent #42 via ERC-8004 registry
+// ERC-8004 (resolve agent ID to address) - agent ID auto-resolves via registry
+await client.pay({ to: '42', amount: 5.00 }); // resolves agent #42 via ERC-8004 registry
 
 // Force adapter via metadata (override auto-detection)
-await client.pay('0xProvider', {
+await client.pay({
+  to: '0xProvider',
   amount: 10.00,
   metadata: { preferredAdapter: 'x402' }
 });
@@ -78,14 +132,14 @@ import { provide, request } from '@agirails/sdk';
 
 // Provider: expose a service in 3 lines
 provide('code-review', async (job) => {
-  const review = await reviewCode(job.payload.code);
+  const review = await reviewCode(job.input.code);
   return { output: review, confidence: 0.95 };
 });
 
 // Requester: buy a service in 1 line
 const result = await request('code-review', {
-  payload: { code: sourceCode },
-  maxBudget: 5.00,
+  input: { code: sourceCode },
+  budget: 5.00,
 });
 ```
 
@@ -98,18 +152,19 @@ For production agents with multiple capabilities, structured pricing, and lifecy
 ```typescript
 import { Agent } from '@agirails/sdk';
 
-const agent = new Agent('my-agent', {
-  capabilities: ['code-review', 'translation'],
-  pricing: { model: 'per-task', base: 2.00 },
+const agent = new Agent({
+  name: 'my-agent',
+  network: 'testnet',
+  behavior: { concurrency: 3 },
 });
 
 agent.provide('code-review', async (job) => {
-  const review = await reviewCode(job.payload.code);
+  const review = await reviewCode(job.input.code);
   return { output: review };
 });
 
 agent.provide('translation', async (job) => {
-  const translated = await translate(job.payload.text, job.payload.lang);
+  const translated = await translate(job.input.text, job.input.lang);
   return { output: translated };
 });
 
@@ -355,11 +410,11 @@ Standardized agent discovery via well-known URL:
 For local/testing discovery:
 
 ```typescript
-import { ServiceDirectory } from '@agirails/sdk';
+import { serviceDirectory } from '@agirails/sdk';
 
-const directory = new ServiceDirectory();
-directory.register('translation', { address: '0x...', price: 0.50 });
-const provider = directory.find('translation');
+// In-memory, per-process singleton (not persistent)
+serviceDirectory.register('translation', { address: '0x...', price: 0.50 });
+const providers = serviceDirectory.findProviders('translation');
 ```
 
 ### ERC-8004 Registry Lookup
@@ -367,9 +422,11 @@ const provider = directory.find('translation');
 On-chain agent identity resolution:
 
 ```typescript
-// Resolve agent ID to address
-const address = await client.resolveAgent(42);
-// Uses ERC-8004 Identity Registry on Base
+// Resolve agent ID to address via ERC-8004 bridge (read-only)
+import { ERC8004Bridge } from '@agirails/sdk';
+const bridge = new ERC8004Bridge({ network: 'base-sepolia' });
+const agent = await bridge.resolveAgent('42');
+console.log(agent.wallet); // payment address
 ```
 
 ### Job Board (Coming Soon)
@@ -412,8 +469,8 @@ import { request } from '@agirails/sdk';
 
 async function getTranslation(text: string, lang: string) {
   const result = await request('translation', {
-    payload: { text, lang },
-    maxBudget: 1.00,
+    input: { text, lang },
+    budget: 1.00,
   });
   return result.output;
 }
@@ -424,27 +481,32 @@ async function getTranslation(text: string, lang: string) {
 ```typescript
 import { Agent, X402Adapter } from '@agirails/sdk';
 
-const agent = new Agent('research-assistant', {
-  capabilities: ['research'],
+const agent = new Agent({
+  name: 'research-assistant',
+  network: 'testnet',
 });
 
 // Register x402 for API calls
-agent.registerAdapter(new X402Adapter(await agent.getAddress(), {
+agent.registerAdapter(new X402Adapter(agent.getAddress(), {
   expectedNetwork: 'base-sepolia',
-  transferFn: async (to, amount) => (await usdcContract.transfer(to, amount)).hash,
+  // Provide your own USDC transfer function (signer = your ethers.Wallet)
+  transferFn: async (to, amount) => {
+    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
+    return (await usdc.transfer(to, amount)).hash;
+  },
 }));
 
 agent.provide('research', async (job) => {
   // Use x402 for cheap API calls
-  const data = await agent.pay('https://api.scraper.com/extract', {
+  const data = await agent.pay({
+    to: 'https://api.scraper.com/extract',
     amount: 0.10,
-    payload: { url: job.payload.url },
   });
 
   // Use ACTP for expensive sub-tasks
-  const analysis = await agent.pay('0xAnalystAgent', {
+  const analysis = await agent.pay({
+    to: '0xAnalystAgent',
     amount: 5.00,
-    payload: { data: data.output },
   });
 
   return { output: analysis.output };
@@ -488,10 +550,10 @@ You can mix levels as needed. Start simple, upgrade when you need more control:
 
 ```typescript
 // Start with Level 0
-const result = await request('translation', { payload: { text: 'Hello' }, maxBudget: 1.00 });
+const { result } = await request('translation', { input: { text: 'Hello' }, budget: 1.00 });
 
 // Move to Level 1 for multi-capability agents
-const agent = new Agent('my-agent', { capabilities: ['translation'] });
+const agent = new Agent({ name: 'my-agent', network: 'testnet' });
 agent.provide('translation', handler);
 
 // Drop to Level 2 for fine-grained control
@@ -514,4 +576,4 @@ const rawTx = await client.advanced.getTransaction(result.txId);
 - Agent building guide: See `agirails-agent-building` skill
 - Full protocol specification: See `agirails-core` skill
 - TypeScript specifics: See `agirails-typescript` skill
-- Python specifics: See `agirails-python` skill
+- Python SDK: Coming soon (full rewrite in progress)
