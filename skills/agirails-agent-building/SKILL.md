@@ -513,7 +513,7 @@ agent:
   network: {{network}}
 services:
   - name: {{service_name}}
-    capability: {{capability}}
+    type: {{service_type}}
     price: {{price}}
     minBudget: {{min_budget}}
     concurrency: {{concurrency}}
@@ -549,7 +549,7 @@ contracts:
 
 {{Description of what the service does.}}
 
-- **Capability**: `{{capability}}`
+- **Type**: `{{service_type}}`
 - **Base price**: ${{price}} USDC per job
 - **Min budget**: ${{min_budget}} USDC
 - **Concurrency**: {{concurrency}} simultaneous jobs
@@ -567,7 +567,8 @@ contracts:
 1. **YAML frontmatter is REQUIRED** — must start with `---` and end with `---`
 2. **`protocol: AGIRAILS`** — must be present
 3. **`contracts`** — include addresses for the target network(s)
-4. **`agent.name`** — must match alphanumeric with hyphens/dots/underscores
+4. **`services[].type`** — SDK reads `svc.type` or `svc.service_type` (NOT `capability`). Must be lowercase alphanumeric with hyphens (e.g., `text-generation`, `code-review`)
+5. **`agent.name`** — must match alphanumeric with hyphens/dots/underscores
 5. **Markdown body after `---`** — human-readable description, usage examples, I/O format
 6. **Reference the canonical template** at `SDK and Runtime/AGIRAILS.md/AGIRAILS.md` for the full field set
 

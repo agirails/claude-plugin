@@ -112,7 +112,7 @@ agent:
   network: {{network}}
 services:
   - name: {{service_name}}
-    capability: {{capability}}
+    type: {{service_type}}
     price: {{price}}
     minBudget: {{min_budget}}
     concurrency: {{concurrency}}
