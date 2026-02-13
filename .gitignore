@@ -1,0 +1,11 @@
+# Development tools (local only)
+CLAUDE.md
+.claude/
+.ralph/
+SCRATCHPAD.md
+
+# OS
+.DS_Store
+
+# Logs
+*.log
