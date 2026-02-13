@@ -96,7 +96,7 @@ Mainnet transaction limit: $1,000 per tx.
 
 **Soon:**
 - Job Board MVP — marketplace matching
-- Global capability registry with discovery
+- Global service type registry with discovery
 - Auto-bidding and negotiation protocols
 
 ## 8-State Machine

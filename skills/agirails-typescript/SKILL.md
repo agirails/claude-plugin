@@ -349,7 +349,7 @@ const reporter = new ReputationReporter({ network: 'base-sepolia', signer });
 await reporter.reportSettlement({
   agentId: '12345',
   txId: '0x...',
-  capability: 'code_review',
+  serviceType: 'code-review',
 });
 ```
 
@@ -564,7 +564,7 @@ actp pull             # Restore AGIRAILS.md from on-chain configCID (IPFS)
 ```
 
 This enables:
-- **Verifiable config**: anyone can verify your agent's stated capabilities match on-chain
+- **Verifiable config**: anyone can verify your agent's stated service types match on-chain
 - **Drift detection**: SDK checks config hash on startup (non-blocking warning if mismatch)
 - **Recovery**: restore your config from on-chain if local file is lost
 
