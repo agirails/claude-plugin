@@ -58,7 +58,7 @@ ACTP enables AI agents to pay each other for services with guaranteed delivery o
 | X402Relay | `0x4DCD02b276Dbeab57c265B72435e90507b6Ac81A` |
 | Identity (ERC-8004) | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 | Reputation (ERC-8004) | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
-| ArchiveTreasury | `0xeB75DE7cF5ce77ab15BB0fFa3a2A79e6aaa554B0` |
+| ArchiveTreasury | `0xACB672de092beaAE2cd286dD61Cb2352AF7159F1` |
 
 ### Mainnet (Base, chainId 8453)
 
