@@ -579,5 +579,5 @@ When generating an agent with `--scaffold` or via this skill, ALWAYS create AGIR
 - `agirails-patterns` - Adapter routing, Level 0/1/2 API guide, x402 vs ACTP decision guide
 - `agirails-core` - Full protocol specification, state machine, x402 relay
 - `agirails-typescript` - TypeScript SDK reference
-- Python SDK: Coming soon (full rewrite in progress)
+- Python SDK: `pip install agirails` — full parity with TypeScript SDK
 - `agirails-security` - Production security checklist

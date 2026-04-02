@@ -261,8 +261,10 @@ pip install agirails==2.0.5  # Specific version
 
 | Version | Release | Highlights |
 |---------|---------|------------|
+| 3.0.0 | 2026-02 | Adapter routing, x402, ERC-8004, AIP-13 keystore, Smart Wallet |
+| 2.5.0 | 2026-01 | Deployment security, AGIRAILS.md SOT, pending publish |
 | 2.1.0 | 2025-12 | Batch transactions, improved events |
-| 2.0.0 | 2025-11 | Three-tier API, mock mode |
+| 2.0.0 | 2025-12 | Three-tier API, mock mode, Python 3.9 support |
 | 1.0.0 | 2025-10 | Initial release |
 
 ## Best Practices

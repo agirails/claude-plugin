@@ -873,7 +873,7 @@ await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
 ## Cross-References
 
 - **OpenClaw Skill**: Full agent templates, onboarding wizard, OpenClaw integration
-- **Python SDK**: Coming soon (full rewrite in progress)
+- **Python SDK**: `pip install agirails` — full parity with TypeScript SDK
 - **n8n Node**: `n8n-nodes-actp` for no-code workflow integration
 - **SDK Examples**: https://github.com/agirails/sdk-examples
 

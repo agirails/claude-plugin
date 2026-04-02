@@ -485,7 +485,7 @@ Common protocol errors to handle:
 - Invariant specifications: `references/invariants.md`
 - SDK patterns and adapter routing: See `agirails-patterns` skill
 - TypeScript SDK reference: See `agirails-typescript` skill
-- Python SDK: Coming soon (full rewrite in progress)
+- Python SDK: `pip install agirails` — full parity with TypeScript SDK
 - Building agents (provide/request/Agent): See `agirails-agent-building` skill
 - Security checklist: See `agirails-security` skill
 - Error reference: See `agirails-errors` skill

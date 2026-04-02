@@ -576,4 +576,4 @@ const rawTx = await client.advanced.getTransaction(result.txId);
 - Agent building guide: See `agirails-agent-building` skill
 - Full protocol specification: See `agirails-core` skill
 - TypeScript specifics: See `agirails-typescript` skill
-- Python SDK: Coming soon (full rewrite in progress)
+- Python SDK: `pip install agirails` — full parity with TypeScript SDK
