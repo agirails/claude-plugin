@@ -120,8 +120,8 @@ contracts:
   testnet:
     chain: base-sepolia
     chainId: 84532
-    kernel: "0x0ba0b17554601b30F5406e74d2208f567C12CcFE"
-    escrow: "0xedC62264301A119207f1f89C6bDE4Fd7a7A4CeB4"
+    kernel: "0x90a1Bcc218c148F63D036aB2f7B5329C9ee7868d"
+    escrow: "0xA336967F4481EeE4A8Bb59e35423D273fbf9f5e7"
     usdc: "0x444b4e1A65949AB2ac75979D5d0166Eb7A248Ccb"
   mainnet:
     chain: base-mainnet

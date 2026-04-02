@@ -249,7 +249,7 @@ console.log(result.feeBreakdown);     // { grossAmount, providerNet, platformFee
 ```
 
 **X402Relay contracts:**
-- Sepolia: `0x4DCD02b276Dbeab57c265B72435e90507b6Ac81A`
+- Sepolia: `0x0804FC3c04214bC9036E126554aF7EE24d589988`
 - Mainnet: `0x81DFb954A3D58FEc24Fc9c946aC2C71a911609F8`
 
 > **ACTP vs x402 -- when to use which?**
@@ -714,10 +714,10 @@ All commands support `--json` for machine-readable output and `-q`/`--quiet` for
 
 | Contract | Address |
 |----------|---------|
-| ACTPKernel | `0x0ba0b17554601b30F5406e74d2208f567C12CcFE` |
-| EscrowVault | `0xedC62264301A119207f1f89C6bDE4Fd7a7A4CeB4` |
+| ACTPKernel | `0x90a1Bcc218c148F63D036aB2f7B5329C9ee7868d` |
+| EscrowVault | `0xA336967F4481EeE4A8Bb59e35423D273fbf9f5e7` |
 | MockUSDC | `0x444b4e1A65949AB2ac75979D5d0166Eb7A248Ccb` |
-| X402Relay | `0x4DCD02b276Dbeab57c265B72435e90507b6Ac81A` |
+| X402Relay | `0x0804FC3c04214bC9036E126554aF7EE24d589988` |
 | ERC-8004 Identity | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
 | ERC-8004 Reputation | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
 
