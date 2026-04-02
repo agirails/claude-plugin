@@ -517,19 +517,7 @@ services:
     price: {{price}}
     minBudget: {{min_budget}}
     concurrency: {{concurrency}}
-contracts:
-  testnet:
-    chain: base-sepolia
-    chainId: 84532
-    kernel: "0x90a1Bcc218c148F63D036aB2f7B5329C9ee7868d"
-    escrow: "0xA336967F4481EeE4A8Bb59e35423D273fbf9f5e7"
-    usdc: "0x444b4e1A65949AB2ac75979D5d0166Eb7A248Ccb"
-  mainnet:
-    chain: base-mainnet
-    chainId: 8453
-    kernel: "0x132B9eB321dBB57c828B083844287171BDC92d29"
-    escrow: "0x6aAF45882c4b0dD34130ecC790bb5Ec6be7fFb99"
-    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+# contracts: resolved automatically by SDK via getNetwork()
 ---
 
 # {{Agent Name}}

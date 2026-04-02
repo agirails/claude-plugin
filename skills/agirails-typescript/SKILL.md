@@ -248,9 +248,7 @@ console.log(result.feeBreakdown);     // { grossAmount, providerNet, platformFee
 // No release() needed -- x402 is atomic (instant settlement)
 ```
 
-**X402Relay contracts:**
-- Sepolia: `0x0804FC3c04214bC9036E126554aF7EE24d589988`
-- Mainnet: `0x81DFb954A3D58FEc24Fc9c946aC2C71a911609F8`
+**X402Relay contracts:** resolved automatically by SDK via `getNetwork()`.
 
 > **ACTP vs x402 -- when to use which?**
 >
@@ -710,27 +708,14 @@ All commands support `--json` for machine-readable output and `-q`/`--quiet` for
 
 ## Contract Addresses
 
-### Testnet (Base Sepolia, chainId 84532)
+Contract addresses are resolved automatically by the SDK via `getNetwork("base-sepolia")` or `getNetwork("base-mainnet")`. No need to hardcode addresses.
 
-| Contract | Address |
-|----------|---------|
-| ACTPKernel | `0x90a1Bcc218c148F63D036aB2f7B5329C9ee7868d` |
-| EscrowVault | `0xA336967F4481EeE4A8Bb59e35423D273fbf9f5e7` |
-| MockUSDC | `0x444b4e1A65949AB2ac75979D5d0166Eb7A248Ccb` |
-| X402Relay | `0x0804FC3c04214bC9036E126554aF7EE24d589988` |
-| ERC-8004 Identity | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
-| ERC-8004 Reputation | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
+ERC-8004 Registries (canonical CREATE2, same address all chains):
 
-### Mainnet (Base, chainId 8453)
-
-| Contract | Address |
-|----------|---------|
-| ACTPKernel | `0x132B9eB321dBB57c828B083844287171BDC92d29` |
-| EscrowVault | `0x6aAF45882c4b0dD34130ecC790bb5Ec6be7fFb99` |
-| USDC (Circle) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| X402Relay | `0x81DFb954A3D58FEc24Fc9c946aC2C71a911609F8` |
-| ERC-8004 Identity | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
-| ERC-8004 Reputation | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` |
+| Registry | Mainnet | Testnet |
+|----------|---------|---------|
+| Identity | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
+| Reputation | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
 
 ---
 
