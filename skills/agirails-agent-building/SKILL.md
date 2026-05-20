@@ -2,7 +2,7 @@
 description: Use this skill when the user wants to build an AI agent that sells or buys services through AGIRAILS, create a service agent, implement agent-to-agent payments, build an x402 provider, set pricing, or integrate ACTP into autonomous agents. This skill clearly separates what the protocol handles from what the developer must implement, and covers all API levels from one-liners to full ACTPClient control.
 ---
 
-# Building Agents with AGIRAILS (v3.0)
+# Building Agents with AGIRAILS (v4.0)
 
 This skill provides guidance for building AI agents that participate in the AGIRAILS economy - either as **service providers** (selling services), **requesters** (buying services), or **full autonomous agents** (both earning and paying).
 

@@ -228,6 +228,6 @@ Need help? Ask: "How do I integrate AGIRAILS into my agent?"
 
 Example:
 ```
-/agirails:init --version 3.0.0
+/agirails:init --version 4.0.0
 /agirails:init --scaffold
 ```

@@ -124,13 +124,16 @@ Payment Summary (x402 Instant):
 +-------------------------------------+
 | To:       https://api.example.com   |
 | Amount:   $0.50 USDC                |
-| Fee:      $0.05 (minimum)           |
-| Total:    $0.55 USDC                |
+| Fee:      $0.00 (zero — x402 v2)    |
+| Total:    $0.50 USDC                |
 | Mode:     x402 (instant, no refund) |
-| Via:      X402Relay contract         |
+| Via:      @x402/fetch + facilitator |
 +-------------------------------------+
 
 Warning: x402 payments are instant and non-refundable.
+Note: payTo goes directly buyer→seller (no fee skim). X402Relay
+contract retired on mainnet (Sepolia still has it for legacy
+direct-call consumers).
 Proceed?
 Options: [Pay Now] [Edit Details] [Cancel]
 ```
@@ -166,31 +169,27 @@ createPayment().catch(console.error);
 
 **x402 Instant Payment (TypeScript):**
 ```typescript
-import { ACTPClient, X402Adapter } from '@agirails/sdk';
+import { ACTPClient } from '@agirails/sdk';
 
 async function createX402Payment() {
   // Keystore auto-detected from .actp/keystore.json
+  // X402Adapter is auto-registered when a wallet provider is present
+  // (SDK 3.3.0+) — no manual `client.registerAdapter(...)` call needed.
   const client = await ACTPClient.create({
     mode: 'testnet', // or 'mainnet'
   });
 
-  // Register x402 adapter for URL-based payments
-  client.registerAdapter(new X402Adapter(client.getAddress(), {
-    expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-    // Provide your own USDC transfer function (signer = your ethers.Wallet)
-    transferFn: async (to, amount) => {
-      const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
-      return (await usdc.transfer(to, amount)).hash;
-    },
-  }));
-
-  const result = await client.pay({
+  // Opt into x402 routing via metadata. URL destination + paymentMethod
+  // selector tells the SDK to use the auto-registered X402Adapter,
+  // which routes through @x402/fetch + facilitator (zero AGIRAILS fee,
+  // payTo goes directly buyer → seller).
+  const result = await client.basic.pay({
     to: 'https://api.example.com/translate',
     amount: 0.50,
-    input: { text: 'Hello world', targetLang: 'es' },
+    metadata: { paymentMethod: 'x402' },
   });
 
-  console.log('Response:', result.response);
+  console.log('Response:', result);
 }
 
 createX402Payment().catch(console.error);
@@ -240,7 +239,7 @@ Fees apply to both ACTP and x402 payments:
 | $100.00 | max($1.00, $0.05) | $1.00 |
 | $1000.00 | max($10.00, $0.05) | $10.00 |
 
-For x402, fees are enforced atomically by the X402Relay contract.
+For x402 v2, the AGIRAILS fee is zero — `payTo` goes directly buyer→seller via `@x402/fetch` + facilitator (EIP-3009 / Permit2). The deprecated X402Relay contract is retired on mainnet and remains on Sepolia only for legacy direct-call consumers. SDK consumers don't need to think about either path — `client.basic.pay({ to: 'https://...' , metadata: { paymentMethod: 'x402' } })` routes automatically.
 
 ## Input Validation
 

@@ -47,20 +47,23 @@ Display current vs latest:
 │  AGIRAILS SDK VERSION CHECK                                     │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  Current version:  2.0.5                                        │
-│  Latest version:   2.1.0                                        │
+│  Current version:  3.5.3                                        │
+│  Latest version:   4.0.0                                        │
 │  Update available: Yes                                          │
 │                                                                 │
-│  Changes in 2.1.0:                                              │
-│  ✓ Added batch transaction support                              │
-│  ✓ Improved error messages                                      │
-│  ✓ Gas optimization (15% reduction)                             │
-│  ⚠ BREAKING: DELIVERED now requires ABI-encoded dispute proof   │
+│  Changes in 4.0.0:                                              │
+│  ✓ Base mainnet redeploy 2026-05-19 (new addresses)             │
+│  ✓ INV-30 per-tx disputeBondBpsLocked (hardening)               │
+│  ✓ AIP-14 dispute bonds + initiator tracking                    │
+│  ✓ Canonical 21-field TransactionView ABI                       │
+│  ✓ Workflow-attested publish (OIDC + SLSA provenance)           │
+│  ⚠ BREAKING: mainnet address surface changed                    │
+│  ⚠ BREAKING: x402Relay removed from base-mainnet config         │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 
 Proceed with upgrade?
-Options: [Upgrade to 2.1.0] [View full changelog] [Skip]
+Options: [Upgrade to 4.0.0] [View full changelog] [Skip]
 ```
 
 ### Step 3: Upgrade Command
@@ -114,99 +117,48 @@ Options: [Apply all] [Review each] [Skip - I'll do it manually]
 
 ### Step 5: Migration Patterns by Version
 
-#### 1.x → 2.0 Migration
+#### 3.x → 4.0.0 Migration
 
-**Client Initialization:**
+**Mainnet address surface change.** The Base mainnet kernel was redeployed 2026-05-19; all four core contracts moved. If you've hardcoded addresses, swap; if you read via `getNetwork('base-mainnet').contracts.*`, the swap is automatic on this bump.
+
+**X402Relay removed from mainnet config:**
 ```typescript
-// OLD (1.x)
-const client = new ACTPClient({
-  network: 'base-sepolia',
-  privateKey: '0x...',
-});
+// OLD (3.x): x402Relay could be accessed on mainnet
+const relay = getNetwork('base-mainnet').contracts.x402Relay;
 
-// NEW (2.0) - keystore auto-detect (recommended)
-const client = await ACTPClient.create({
-  mode: 'testnet',  // 'mock' | 'testnet' | 'mainnet'
-});
+// NEW (4.0.0): x402Relay is undefined on mainnet (deprecated since 3.3.0)
+// Payments route directly buyer→seller via @x402/fetch + facilitator
+// On Sepolia x402Relay still exists for legacy direct-call consumers.
+const relay = getNetwork('base-sepolia').contracts.x402Relay; // still works
 ```
 
-**Transaction Creation:**
+**X402Adapter is auto-registered (since SDK 3.3.0, unchanged in 4.0.0):**
 ```typescript
-// OLD (1.x)
-const txId = await client.createTransaction({
-  provider: '0x...',
-  amount: 100,
-  deadline: Date.now() + 86400000,
-});
+// OLD (pre-3.3.0): manual registration
+client.registerAdapter(new X402Adapter(client.getAddress(), {
+  expectedNetwork: 'base-sepolia',
+  transferFn: ...,
+  feeCollector: ...,
+}));
 
-// NEW (2.0)
+// NEW (3.3.0+): just opt in via metadata
 const result = await client.basic.pay({
-  to: '0x...',
-  amount: 100.00,
-  deadline: '+24h',  // Human-readable format
+  to: 'https://api.example.com/...',
+  amount: 0.05,
+  metadata: { paymentMethod: 'x402' },
 });
-const txId = result.txId;
 ```
 
-**State Transitions:**
-```typescript
-// OLD (1.x)
-await client.transitionState(txId, 'DELIVERED');
+**TransactionView ABI: 2 new uint16 fields.** The canonical `getTransaction()` tuple grew from 19 to 21 fields (added `requesterPenaltyBpsLocked` + `disputeBondBpsLocked`). SDK 4.0.0 ships the matching ABI — consumers that read via `client.standard.getTransaction(txId)` see the typed result automatically; raw ethers callers should pull the ABI from `@agirails/sdk/dist/abi/ACTPKernel.json` instead of pinning an older copy.
 
-// NEW (2.0) - IN_PROGRESS required before DELIVERED
-await client.standard.transitionState(txId, 'IN_PROGRESS');
-// DELIVERED requires ABI-encoded dispute window proof
-const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-const proof = abiCoder.encode(['uint256'], [172800]); // 2 days
-await client.standard.transitionState(txId, 'DELIVERED', proof);
-```
+**Sepolia kernel also moved.** Sepolia redeployed alongside mainnet (V4) so both networks return the same canonical 21-field tuple shape. Old Sepolia kernel `0xE83cba71…` is retired — anyone reading stuck txs from there should pin to `@agirails/sdk@4.0.0-beta.11`.
 
-**Error Handling:**
-```typescript
-// OLD (1.x)
-try {
-  await client.pay(...);
-} catch (e) {
-  if (e.code === 'INSUFFICIENT_BALANCE') { ... }
-}
+#### 2.x → 3.x Migration (collapsed — see git log on @agirails/sdk for full notes)
 
-// NEW (2.0)
-import { InsufficientFundsError } from '@agirails/sdk';
-
-try {
-  await client.basic.pay(...);
-} catch (e) {
-  if (e instanceof InsufficientFundsError) {
-    console.log('Need:', e.details.required);
-    console.log('Have:', e.details.available);
-  }
-}
-```
-
-#### 2.0 → 2.1 Migration
-
-**State Machine Enforcement:**
-```typescript
-import { ethers } from 'ethers';
-
-// OLD (2.0)
-await client.standard.transitionState(txId, 'DELIVERED');
-
-// NEW (2.1)
-await client.standard.transitionState(txId, 'IN_PROGRESS');
-const proof = ethers.AbiCoder.defaultAbiCoder().encode(['uint256'], [172800]);
-await client.standard.transitionState(txId, 'DELIVERED', proof);
-```
-
-**Batch Operations:**
-```typescript
-// NEW in 2.1: Batch transactions
-const results = await client.advanced.batchPay([
-  { to: '0x...', amount: 10.00 },
-  { to: '0x...', amount: 20.00 },
-  { to: '0x...', amount: 30.00 },
-]);
-```
+- Adapter routing (ACTP / x402 / ERC-8004) — auto-routed by destination shape
+- AIP-12 Smart Wallet + paymaster gasless flows
+- Apex audit hardening (10+ FIND closures)
+- Last 3.x stable: `3.5.3`
 
 ### Step 6: Verification
 
@@ -230,11 +182,12 @@ console.log('Mock mode:', client.getMode() === 'mock');
 │  POST-UPGRADE CHECKLIST                                         │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  [x] SDK upgraded to 2.1.0                                      │
-│  [x] Breaking changes migrated (3 files)                        │
+│  [x] SDK upgraded to 4.0.0                                      │
+│  [x] Breaking changes migrated                                  │
 │  [ ] Run tests: npm test                                        │
 │  [ ] Test mock mode: npx ts-node test-mock.ts                   │
 │  [ ] Test testnet (if applicable)                               │
+│  [ ] Verify mainnet integration uses getNetwork() helper        │
 │                                                                 │
 │  Need help?                                                     │
 │  - /agirails:debug for troubleshooting                          │
@@ -249,22 +202,26 @@ If upgrade causes issues:
 
 **TypeScript:**
 ```bash
-npm install @agirails/sdk@2.0.5  # Specific version
+npm install @agirails/sdk@3.5.3  # Last stable 3.x — uses retired V2 mainnet contracts
 ```
 
 **Python:**
 ```bash
-pip install agirails==2.0.5  # Specific version
+pip install agirails==2.4.0  # Last stable Python SDK on PyPI
 ```
+
+> **Note on rollback:** Pinning to 3.5.3 means using the retired V2 mainnet kernel (`0x132B9eB3…`). That contract is still live but receives no new SDK traffic; only use as a temporary measure while you debug a 4.0.0 incompatibility. File an issue at https://github.com/agirails/sdk-js/issues so we can land a 4.0.1 patch instead.
 
 ## Version History
 
 | Version | Release | Highlights |
 |---------|---------|------------|
+| **4.0.0** | **2026-05-19** | Mainnet V3 + Sepolia V4 redeploy, INV-30, canonical 21-field ABI, workflow-attested publish |
+| 3.5.3 | 2026-04-18 | Mainnet-compat legacy 16-field ABI fallback, RPC default to publicnode |
+| 3.3.0 | 2026-04-12 | x402 v2, X402Adapter auto-registration |
 | 3.0.0 | 2026-02 | Adapter routing, x402, ERC-8004, AIP-13 keystore, Smart Wallet |
 | 2.5.0 | 2026-01 | Deployment security, AGIRAILS.md SOT, pending publish |
-| 2.1.0 | 2025-12 | Batch transactions, improved events |
-| 2.0.0 | 2025-12 | Three-tier API, mock mode, Python 3.9 support |
+| 2.0.0 | 2025-12 | Three-tier API, mock mode |
 | 1.0.0 | 2025-10 | Initial release |
 
 ## Best Practices

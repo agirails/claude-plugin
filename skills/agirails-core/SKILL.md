@@ -62,7 +62,7 @@ Mainnet transaction limit: $1,000 per tx.
 - ERC-8004 portable identity and reputation
 - Config management via AGIRAILS.md (on-chain hash + IPFS CID)
 - Adapter routing: ACTP escrow, x402 instant payments, ERC-8004 resolution
-- x402 instant payments via X402Relay contract
+- x402 v2 instant payments via `@x402/fetch` + facilitator (zero AGIRAILS fee — X402Relay contract deprecated on mainnet, Sepolia-only legacy)
 
 **Recently implemented (not yet fully mainnet):**
 - AIP-12 Payment Abstraction: Smart Wallet (ERC-4337) + Paymaster
@@ -158,29 +158,20 @@ x402 is an HTTP-native payment protocol for instant, one-request-one-response pa
 | Payment flow | Lock -> Hold -> Release | Single atomic transfer |
 | Dispute resolution | Yes (bilateral + mediator) | No |
 | State machine | 8 states | None (instant settlement) |
-| Fee | 1% / $0.05 min | 1% / $0.05 min (same) |
-| Contract | ACTPKernel + EscrowVault | X402Relay |
+| Fee | 1% / $0.05 min | 0% (x402 v2 — direct buyer→seller, no skim) |
+| Contract | ACTPKernel + EscrowVault | None on mainnet / X402Relay on Sepolia (legacy) |
 | Refunds | Yes (CANCELLED state) | No |
 | Delivery proof | On-chain (EAS attestation) | HTTP response body |
 
-**X402Relay contract** handles fee splitting atomically:
-- Splits payment into provider share + platform fee in a single transaction
-- Same fee formula: `max(grossAmount * bps / 10000, MIN_FEE)`
-- Fees go to ArchiveTreasury (same as ACTP)
+**x402 v2 routing (SDK 3.3.0+):** Payments via HTTPS endpoints route through `@x402/fetch` + facilitator (Coinbase public by default, EIP-3009 / Permit2). No AGIRAILS contract intermediation, no fee skim — `payTo` goes directly buyer → seller. The legacy X402Relay contract was deprecated for the mainnet redeploy (2026-05-19) and is NOT redeployed in the V3 mainnet stack; on Sepolia it remains live at `0x110b25bb…` for legacy direct-call consumers only.
 
 **Using x402 in SDK:**
-```
-import { X402Adapter } from '@agirails/sdk';
+```typescript
+import { ACTPClient } from '@agirails/sdk';
 
-// Register the adapter
-client.registerAdapter(new X402Adapter(client.getAddress(), {
-  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  // Provide your own USDC transfer function (signer = your ethers.Wallet)
-  transferFn: async (to, amount) => {
-    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
-    return (await usdc.transfer(to, amount)).hash;
-  },
-}));
+// X402Adapter is auto-registered when wallet provider is present (SDK 3.3.0+)
+// No manual registerAdapter call needed.
+const client = await ACTPClient.create({ mode: 'mainnet' });
 
 // Pay via URL (adapter auto-routes to x402)
 await client.pay({ to: 'https://provider.example.com/api/endpoint', amount: 0.50 });

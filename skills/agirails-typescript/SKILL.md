@@ -1,8 +1,8 @@
 ---
-description: This skill provides TypeScript SDK reference for AGIRAILS v3.0.0 when the user is working with TypeScript, Node.js, package.json, npm, @agirails/sdk, or asks about TypeScript-specific implementation details. Use this skill when writing TypeScript code that integrates with ACTP (Agent Commerce Transaction Protocol) — escrow payments, x402 instant payments, ERC-8004 identity, adapter routing, or agent lifecycle.
+description: This skill provides TypeScript SDK reference for AGIRAILS v4.0.0 when the user is working with TypeScript, Node.js, package.json, npm, @agirails/sdk, or asks about TypeScript-specific implementation details. Use this skill when writing TypeScript code that integrates with ACTP (Agent Commerce Transaction Protocol) — escrow payments, x402 instant payments, ERC-8004 identity, adapter routing, or agent lifecycle.
 ---
 
-# AGIRAILS TypeScript SDK v3.0.0
+# AGIRAILS TypeScript SDK v4.0.0
 
 Complete TypeScript SDK reference for integrating ACTP into Node.js and TypeScript projects.
 
@@ -220,35 +220,26 @@ const client = await ACTPClient.create({
 For simple API calls with no deliverables or disputes -- atomic, one-step:
 
 ```typescript
-import { ACTPClient, X402Adapter } from '@agirails/sdk';
+import { ACTPClient } from '@agirails/sdk';
 
 const client = await ACTPClient.create({ mode: 'mainnet' });
 
-// Register x402 adapter (not registered by default)
-client.registerAdapter(new X402Adapter(client.getAddress(), {
-  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  // Provide your own USDC transfer function (signer = your ethers.Wallet)
-  transferFn: async (to, amount) => {
-    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
-    return (await usdc.transfer(to, amount)).hash;
-  },
-}));
-
-// Pay via URL (auto-routes to x402)
-await client.pay({ to: 'https://provider.example.com/api/endpoint', amount: 0.50 });
-
-// Or via client.basic.pay
+// X402Adapter is auto-registered by ACTPClient.create() when a wallet
+// provider is present (SDK 3.3.0+). No manual registerAdapter call needed.
+// Opt into x402 routing by passing metadata.paymentMethod.
 const result = await client.basic.pay({
-  to: 'https://api.provider.com/service', // HTTPS endpoint that returns 402
+  to: 'https://api.provider.com/service', // HTTPS endpoint
   amount: '5.00',
+  metadata: { paymentMethod: 'x402' },
 });
 
 console.log(result.response?.status); // 200
 console.log(result.feeBreakdown);     // { grossAmount, providerNet, platformFee, feeBps }
 // No release() needed -- x402 is atomic (instant settlement)
+// Zero AGIRAILS fee -- payTo goes directly buyer → seller
 ```
 
-**X402Relay contracts:** resolved automatically by SDK via `getNetwork()`.
+**x402 routing under the hood:** SDK 3.3.0+ uses `@x402/fetch` + facilitator (Coinbase public by default, EIP-3009 / Permit2). The X402Relay contract was deprecated for mainnet payments and is NOT redeployed in the V3 mainnet stack (2026-05-19); on Sepolia it remains live at `0x110b25bb…` for legacy direct-call consumers only.
 
 > **ACTP vs x402 -- when to use which?**
 >
@@ -263,29 +254,24 @@ console.log(result.feeBreakdown);     // { grossAmount, providerNet, platformFee
 
 ## Adapter Routing
 
-The SDK uses an adapter router. By default, only ACTP adapters (basic + standard) are registered:
+The SDK uses an adapter router. ACTP (basic + standard) and x402 are auto-registered on testnet/mainnet when a wallet provider is present (SDK 3.3.0+):
 
 | `to` value | Adapter | Registration |
 |------------|---------|--------------|
-| `0x1234...` (address) | ACTP (basic/standard) | Default, always available |
-| `https://...` (URL) | x402 | Must register `X402Adapter` |
+| `0x1234...` (address) | ACTP (basic/standard) | Auto-registered (default) |
+| `https://...` (URL) + `metadata.paymentMethod: 'x402'` | x402 | Auto-registered when wallet provider present (SDK 3.3.0+) |
 | agent ID (number) | ERC-8004 | Must configure ERC-8004 bridge |
 
 ```typescript
-// ACTP -- works out of the box (default adapters)
+// ACTP -- escrow payment to an address
 await client.basic.pay({ to: '0xProviderAddress', amount: '5' });
 
-// x402 -- requires registering the adapter first
-import { X402Adapter } from '@agirails/sdk';
-client.registerAdapter(new X402Adapter(client.getAddress(), {
-  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  // Provide your own USDC transfer function (signer = your ethers.Wallet)
-  transferFn: async (to, amount) => {
-    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
-    return (await usdc.transfer(to, amount)).hash;
-  },
-}));
-await client.basic.pay({ to: 'https://api.provider.com/service', amount: '1' });
+// x402 -- instant payment to an HTTPS endpoint, opt-in via metadata
+await client.basic.pay({
+  to: 'https://api.provider.com/service',
+  amount: '1',
+  metadata: { paymentMethod: 'x402' },
+});
 
 // ERC-8004 -- requires bridge configuration
 import { ERC8004Bridge } from '@agirails/sdk';

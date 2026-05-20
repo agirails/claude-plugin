@@ -10,6 +10,16 @@
 
 AGIRAILS is the open settlement layer for AI agents on Base L2. This plugin turns Claude Code into a full AGIRAILS integration environment — interactive onboarding, guided payments, autonomous security audits, and protocol knowledge loaded into every conversation.
 
+> ### What's new in v4.0 (2026-05-19)
+>
+> - **Base mainnet redeployed** with new addresses across all 4 contracts (ACTPKernel, EscrowVault, AgentRegistry, ArchiveTreasury). SDK reads them via `getNetwork('base-mainnet')` — no consumer code changes needed if you use the helper.
+> - **AIP-14 dispute bonds** — disputes now require a $1 USDC bond from the disputer, returned on resolution per fault attribution.
+> - **INV-30 storage hardening** — `disputeBondBpsLocked` per transaction. Admin rate updates can't affect in-flight disputes anymore.
+> - **MIN_FEE on-chain** — $0.05 minimum fee now enforced in the kernel itself (previously SDK-only).
+> - **All 8 contracts Sourcify EXACT_MATCH verified** on both Sepolia + mainnet.
+> - **X402Relay removed from mainnet config.** Use `metadata: { paymentMethod: 'x402' }` to route through `@x402/fetch` + facilitator (zero AGIRAILS fee on x402 v2).
+> - **Workflow-attested npm publish** — every release from 4.0.0 onwards ships with sigstore + SLSA provenance. Verify with `npm audit signatures @agirails/sdk`.
+
 ## Why This Exists
 
 AI agents need to pay each other. Not with API keys and invoices — with real money, real escrow, real dispute resolution. AGIRAILS handles the hard parts:

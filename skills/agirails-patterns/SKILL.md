@@ -2,7 +2,7 @@
 description: This skill provides guidance on AGIRAILS SDK usage patterns when the user asks about API levels, adapter routing, which API to use, SDK integration patterns, x402 vs ACTP, mock mode, testnet vs mainnet, key management, discovery, config management, or how to structure their ACTP integration. Use this skill when helping users choose the right abstraction level and payment adapter for their use case.
 ---
 
-# AGIRAILS SDK Patterns (v3.0)
+# AGIRAILS SDK Patterns (v4.0)
 
 The AGIRAILS SDK provides a multi-level API with intelligent adapter routing. Payments are routed automatically based on the `to` parameter, so you pick the right level of abstraction for your needs and the SDK handles the rest.
 
@@ -69,17 +69,13 @@ The SDK inspects the `to` parameter and routes to the correct payment adapter au
 // ACTP escrow (default) - address detected, routes to ACTP
 await client.pay({ to: '0xProviderAddress', amount: 10.00 });
 
-// x402 instant (requires adapter) - URL detected, routes to x402
-import { X402Adapter } from '@agirails/sdk';
-client.registerAdapter(new X402Adapter(client.getAddress(), {
-  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  // Provide your own USDC transfer function (signer = your ethers.Wallet)
-  transferFn: async (to, amount) => {
-    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
-    return (await usdc.transfer(to, amount)).hash;
-  },
-}));
-await client.pay({ to: 'https://api.example.com/translate', amount: 0.50 });
+// x402 instant - URL detected, opt-in via metadata
+// X402Adapter is auto-registered by ACTPClient.create() since SDK 3.3.0+.
+await client.basic.pay({
+  to: 'https://api.example.com/translate',
+  amount: 0.50,
+  metadata: { paymentMethod: 'x402' },
+});
 
 // ERC-8004 (resolve agent ID to address) - agent ID auto-resolves via registry
 await client.pay({ to: '42', amount: 5.00 }); // resolves agent #42 via ERC-8004 registry
@@ -100,8 +96,8 @@ await client.pay({
 | Payment flow | Lock -> Hold -> Release | Single atomic transfer |
 | Dispute resolution | Yes (bilateral + mediator) | No |
 | State machine | 8 states | None (instant settlement) |
-| Fee | 1% / $0.05 min | 1% / $0.05 min (same) |
-| Contract | ACTPKernel + EscrowVault | X402Relay |
+| Fee | 1% / $0.05 min | 0% (x402 v2 — direct buyer→seller, no skim) |
+| Contract | ACTPKernel + EscrowVault | None (mainnet) / X402Relay (Sepolia legacy) |
 | Refunds | Yes (CANCELLED state) | No |
 | Delivery proof | On-chain (EAS attestation) | HTTP response body |
 
@@ -486,24 +482,18 @@ const agent = new Agent({
   network: 'testnet',
 });
 
-// Register x402 for API calls
-agent.registerAdapter(new X402Adapter(agent.getAddress(), {
-  expectedNetwork: 'base-sepolia',
-  // Provide your own USDC transfer function (signer = your ethers.Wallet)
-  transferFn: async (to, amount) => {
-    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
-    return (await usdc.transfer(to, amount)).hash;
-  },
-}));
+// X402Adapter is auto-registered when wallet provider is present (SDK 3.3.0+)
+// No manual registerAdapter call needed.
 
 agent.provide('research', async (job) => {
-  // Use x402 for cheap API calls
+  // Use x402 for cheap API calls (zero AGIRAILS fee, direct buyer→seller)
   const data = await agent.pay({
     to: 'https://api.scraper.com/extract',
     amount: 0.10,
+    metadata: { paymentMethod: 'x402' },
   });
 
-  // Use ACTP for expensive sub-tasks
+  // Use ACTP for expensive sub-tasks (1% fee, $0.05 min, dispute window)
   const analysis = await agent.pay({
     to: '0xAnalystAgent',
     amount: 5.00,

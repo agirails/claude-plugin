@@ -130,7 +130,7 @@ x402 is a protocol for instant HTTP-based payments. Extra caution is required:
 
 - **x402 payments are instant and non-refundable** -- there is no escrow or dispute mechanism
 - **Always validate x402 provider URLs** -- HTTPS only, never HTTP
-- **X402Relay enforces fee splitting atomically** -- fees cannot be skipped or manipulated
+- **x402 v2 has zero AGIRAILS fee** -- payTo goes directly buyer → seller via facilitator (EIP-3009 / Permit2). No relay contract intermediation on mainnet since SDK 3.3.0 / 2026-05-19 V3 redeploy.
 - **Set reasonable spending limits for x402 auto-payments** -- a misconfigured agent can drain funds fast
 - **Verify the x402 endpoint before paying** -- confirm the service is legitimate and returns expected data
 - **Monitor x402 spend separately** -- since there is no refund path, track cumulative spend carefully
