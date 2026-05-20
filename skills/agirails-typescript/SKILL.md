@@ -797,20 +797,16 @@ await client.standard.transitionState(txId, 'DELIVERED', proof);
 ### 6. Forgetting to Register x402 Adapter
 
 ```typescript
-// WRONG - x402 is not registered by default
+// WRONG - URL destination without x402 opt-in
 await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
-// Error: No adapter found for URL target
+// May route via ACTP if no metadata signals x402 intent.
 
-// CORRECT - register adapter first
-client.registerAdapter(new X402Adapter(client.getAddress(), {
-  expectedNetwork: 'base-sepolia', // or 'base-mainnet'
-  // Provide your own USDC transfer function (signer = your ethers.Wallet)
-  transferFn: async (to, amount) => {
-    const usdc = new ethers.Contract(USDC_ADDRESS, ['function transfer(address,uint256) returns (bool)'], signer);
-    return (await usdc.transfer(to, amount)).hash;
-  },
-}));
-await client.basic.pay({ to: 'https://api.provider.com/service', amount: '5' });
+// CORRECT (SDK 3.3.0+) - opt in via metadata; X402Adapter is auto-registered
+await client.basic.pay({
+  to: 'https://api.provider.com/service',
+  amount: '5',
+  metadata: { paymentMethod: 'x402' },
+});
 ```
 
 ---
