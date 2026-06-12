@@ -1,233 +1,99 @@
 ---
-description: Initialize AGIRAILS SDK in the current project. Installs the TypeScript SDK, creates configuration files, and generates an encrypted keystore.
+description: Set up AGIRAILS agent payments by fetching the canonical protocol file and following its onboarding. This is the single source of truth — it stays current automatically.
 allowed-tools:
+  - WebFetch
   - Glob
   - Read
   - Write
   - Edit
   - Bash
   - AskUserQuestion
-argument-hint: "[--version x.x.x] [--scaffold]"
+argument-hint: ""
 ---
 
 # /agirails:init
 
-Set up AGIRAILS SDK in the current project.
+Set up AGIRAILS agent payments in the current project.
 
-## What This Command Does
+> **This command does NOT reimplement onboarding.** The canonical, always-current
+> onboarding flow lives in the protocol file at
+> `https://www.agirails.app/protocol/AGIRAILS.md`. This command's only job is to
+> fetch that file and follow it exactly. Anything you reimplement here will drift
+> out of date the moment the protocol moves — so don't.
 
-1. Check if SDK is already installed
-2. Install the SDK using the appropriate package manager
-3. Create configuration directory (`.actp/`)
-4. Generate encrypted keystore (`.actp/keystore.json`)
-5. Create `.env.example` with required variables
-6. Update `.gitignore` to exclude sensitive files
-7. Show quickstart code example
+## Do this, in order
 
-## Step-by-Step Instructions
+### 1. Fetch the canonical protocol file
 
-### Step 1: Check Existing Installation
 ```bash
-# Check if already installed
-ls node_modules/@agirails/sdk 2>/dev/null && echo "installed" || echo "not installed"
+curl -sLO https://www.agirails.app/protocol/AGIRAILS.md
 ```
 
-If already installed, inform user and ask:
-```
-"AGIRAILS SDK is already installed (version X.X.X). What would you like to do?"
-Options: [Skip installation] [Reinstall] [Upgrade to latest]
-```
+(Or `WebFetch` the same URL.) This file is ~50 KB of YAML + Markdown. It is the
+authoritative spec AND the onboarding script — it contains an `onboarding:` block
+with the exact questions to ask, the order to ask them in, and the commands to run.
 
-### Step 2: Detect Package Manager
-```
-Glob("pnpm-lock.yaml")   -> use pnpm
-Glob("yarn.lock")        -> use yarn
-Glob("package-lock.json") -> use npm
-Default                   -> use npm
-```
+### 2. Read it and follow its `onboarding` section literally
 
-### Step 3: Install SDK
+Read the file you just downloaded. Find the `onboarding:` block in the YAML
+frontmatter. It defines:
+
+- the **questions** to ask the user (name, intent, services, price, budget, …),
+  including which are conditional on `intent` (a pay-only buyer is not asked for a
+  selling price; an earn-only provider is not asked what it wants to buy);
+- the **defaults** to apply WITHOUT asking (network → testnet, wallet → generate);
+- the **setup steps** to run.
+
+Ask the questions with `AskUserQuestion`. Apply the no-ask defaults silently. Then
+run the setup the file describes. As of this writing the happy path is a single
+command:
+
 ```bash
-# npm
-npm install @agirails/sdk
-
-# yarn
-yarn add @agirails/sdk
-
-# pnpm
-pnpm add @agirails/sdk
+npx @agirails/sdk@latest init --mode testnet --intent <pay|earn|both> --test
 ```
 
-If installation fails, show the error and suggest:
-- Check internet connection
-- Try manual installation
-- Check permissions
+— which generates an encrypted keystore, auto-mints 1,000 test USDC (gasless),
+links/publishes the agent, then drives a real on-chain transaction against the
+network's default counterparty (Sentinel) all the way to **SETTLED**, ending with a
+public receipt URL and a framed receipt. **But do not hard-code that command from
+this doc** — read the version in the freshly-downloaded AGIRAILS.md and run what IT
+says, because the flags and steps evolve.
 
-### Step 4: Create Configuration and Keystore
+### 3. Confirm the wow moment
 
-Create `.actp/` directory:
-```bash
-mkdir -p .actp
-touch .actp/.gitkeep
-```
+The flow is correct when the user sees the full lifecycle
+(`INITIATED → COMMITTED → IN_PROGRESS → DELIVERED → SETTLED`) and a
+`https://agirails.app/r/<id>` receipt URL — on **testnet**, on-chain, not mock.
 
-Generate encrypted keystore:
-```bash
-# Generate encrypted keystore
-actp init
-# -> Prompts for password
-# -> Creates .actp/keystore.json (encrypted with AES-128-CTR)
-# -> Derives address from key
-# -> Mints 10,000 MockUSDC in mock mode
-```
+## What NOT to do
 
-If `actp` CLI is not available (SDK not globally installed), generate the keystore programmatically or instruct the user to run `npx @agirails/sdk init` instead.
+- **Do NOT default to mock mode.** The onboarding wow flow is testnet-first. Mock is
+  for later local development, not first-run setup.
+- **Do NOT hand-write `client.ts` / `pay.ts` scaffolding** or reverse-engineer the
+  escrow lifecycle. `actp test` (driven by AGIRAILS.md) already settles a real
+  transaction end-to-end. Hand-rolling it lands the user in mock mode with a
+  half-working manual flow — exactly the failure this command exists to prevent.
+- **Do NOT invent AGIRAILS.md frontmatter** from memory. The canonical V4 schema
+  lives in the downloaded file and on the web onboarding; generate identity files
+  via `actp init` / `actp publish`, which stamp the correct hashes.
+- **Do NOT skip the questions.** A fresh user expects to be asked their agent's name
+  and intent. Silently scaffolding a project is the wrong experience.
 
-If `--scaffold` flag is provided, create full project scaffold:
-```bash
-actp init --scaffold
-# Creates full project scaffold:
-# ├── AGIRAILS.md          <- Agent configuration (source of truth)
-# ├── .actp/
-# │   ├── keystore.json    <- Encrypted private key
-# │   └── .gitkeep
-# ├── .env.example
-# └── src/
-#     └── agent.ts         <- Starter agent code
-```
+## After setup
 
-**CRITICAL: AGIRAILS.md MUST have YAML frontmatter.** The SDK's `parseAgirailsMd()` requires `---` fenced YAML. Generate AGIRAILS.md using this structure:
+Point the user at the other plugin commands, which ARE safe thin helpers:
 
-```markdown
----
-protocol: AGIRAILS
-version: 1.0.0
-spec: ACTP
-network: base
-currency: USDC
-fee: "1% ($0.05 min)"
-agent:
-  name: {{name}}
-  intent: {{intent}}
-  network: {{network}}
-services:
-  - name: {{service_name}}
-    type: {{service_type}}
-    price: {{price}}
-    minBudget: {{min_budget}}
-    concurrency: {{concurrency}}
-# contracts: resolved automatically by SDK via getNetwork()
----
+- `/agirails:pay` — create a payment
+- `/agirails:status` — check a transaction
+- `/agirails:watch` — watch a transaction live
+- `/agirails:states` — explain the 8-state machine
+- `/agirails:debug` — diagnose a stuck transaction
 
-# {{Agent Name}}
+## Why it's built this way
 
-> {{Short description}}
-
-(... markdown body with services, payment, usage examples ...)
-```
-
-Fill `{{placeholders}}` from user's onboarding answers. See `agirails-agent-building` skill for the full template and the canonical template at `SDK and Runtime/AGIRAILS.md/AGIRAILS.md`.
-
-Create `.env.example`:
-```env
-# AGIRAILS SDK Configuration
-
-# Mode: mock (development), testnet (testing), mainnet (production)
-AGIRAILS_MODE=mock
-
-# Key management (choose one):
-# Option 1: Keystore (recommended) -- auto-detected from .actp/keystore.json
-# ACTP_KEY_PASSWORD=your-password
-
-# Option 2: Explicit key
-# ACTP_PRIVATE_KEY=0x...
-
-# RPC URL (optional, has defaults)
-# BASE_SEPOLIA_RPC=https://...
-# BASE_MAINNET_RPC=https://...
-```
-
-### Step 5: Update .gitignore
-
-Check if `.gitignore` exists. If not, create it.
-
-Add these entries if not present:
-```gitignore
-# AGIRAILS
-.actp/
-.env
-.env.local
-.env.*.local
-```
-
-### Step 6: Show Quickstart
-```typescript
-import { ACTPClient } from '@agirails/sdk';
-
-async function main() {
-  // Create client in mock mode (no blockchain needed)
-  // Keystore auto-detected from .actp/keystore.json
-  const client = await ACTPClient.create({ mode: 'mock' });
-
-  // Check balance (USDC wei)
-  const balance = await client.getBalance(client.getAddress());
-  console.log('Balance (wei):', balance);
-
-  // Mint test tokens (mock mode only)
-  // Mint uses USDC wei (6 decimals): 1000 USDC = 1_000_000_000
-  await client.mintTokens(client.getAddress(), '1000000000');
-
-  // Create a payment
-  const result = await client.basic.pay({
-    to: '0xProviderAddress',
-    amount: '10.00',
-    deadline: '+24h',
-  });
-
-  console.log('Transaction ID:', result.txId);
-}
-
-main().catch(console.error);
-```
-
-### Step 7: Show Next Steps
-
-```
-SDK installed successfully!
-
-Next steps:
-1. Set ACTP_KEY_PASSWORD in your environment (password used during keystore generation)
-2. Try the quickstart code above
-3. Run: /agirails:pay to create your first payment
-4. Run: /agirails:states to see the state machine
-
-Useful commands:
-- actp balance        - Check USDC balance
-- actp mint <amount>  - Mint test USDC (mock mode)
-- actp tx list        - List transactions
-- actp publish        - Publish AGIRAILS.md to on-chain registry
-- actp diff           - Compare local AGIRAILS.md with on-chain config
-
-Need help? Ask: "How do I integrate AGIRAILS into my agent?"
-```
-
-## Error Handling
-
-| Error | Resolution |
-|-------|------------|
-| No package manager found | Guide user to install npm |
-| Installation fails | Show error, suggest manual install |
-| Permission denied | Suggest sudo or fix permissions |
-| Network error | Check internet, try again |
-| Keystore already exists | Ask user: overwrite, skip, or backup |
-
-## Command Arguments
-
-- `--version x.x.x`: Install specific version
-- `--scaffold`: Create full project scaffold with AGIRAILS.md and starter code
-
-Example:
-```
-/agirails:init --version 4.0.0
-/agirails:init --scaffold
-```
+There used to be two onboarding surfaces — this command and the protocol file — and
+they drifted. A locally-cached copy of this command went stale (old non-V4
+frontmatter, mock-mode defaults, a dead `client.mock.mint()` API) and hijacked
+fresh "set up payments" prompts, pulling users into a manual mock scaffold instead of
+the on-chain wow flow. Collapsing onboarding to a single server-hosted source
+(AGIRAILS.md) makes that class of drift impossible.
