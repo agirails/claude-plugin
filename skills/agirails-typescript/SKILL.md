@@ -2,7 +2,7 @@
 description: This skill provides TypeScript SDK reference for AGIRAILS v4.0.0 when the user is working with TypeScript, Node.js, package.json, npm, @agirails/sdk, or asks about TypeScript-specific implementation details. Use this skill when writing TypeScript code that integrates with ACTP (Agent Commerce Transaction Protocol) — escrow payments, x402 instant payments, ERC-8004 identity, adapter routing, or agent lifecycle.
 ---
 
-# AGIRAILS TypeScript SDK v4.0.0
+# AGIRAILS TypeScript SDK v4
 
 Complete TypeScript SDK reference for integrating ACTP into Node.js and TypeScript projects.
 

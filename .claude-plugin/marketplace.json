@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "AGIRAILS SDK integration for AI agent payments — ACTP escrow, x402 instant payments, adapter routing, ERC-8004 identity. Zero to first transaction in 5 minutes.",
-    "version": "3.0.0"
+    "version": "3.1.0"
   },
   "plugins": [
     {
       "name": "agirails",
       "source": "./",
       "description": "AGIRAILS SDK integration for AI agent payments — ACTP escrow, x402 instant payments, adapter routing, ERC-8004 identity. Zero to first transaction in 5 minutes.",
-      "version": "3.0.0",
+      "version": "3.1.0",
       "author": {
         "name": "AGIRAILS Team",
         "url": "https://agirails.io/contact"

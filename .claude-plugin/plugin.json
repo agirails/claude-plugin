@@ -1,6 +1,6 @@
 {
   "name": "agirails",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "AGIRAILS SDK integration for AI agent payments — ACTP escrow, x402 instant payments, adapter routing, ERC-8004 identity. Zero to first transaction in 5 minutes.",
   "author": {
     "name": "AGIRAILS Team",

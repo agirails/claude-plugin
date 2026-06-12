@@ -2,7 +2,7 @@
 description: Use this skill when the user wants to build an AI agent that sells or buys services through AGIRAILS, create a service agent, implement agent-to-agent payments, build an x402 provider, set pricing, or integrate ACTP into autonomous agents. This skill clearly separates what the protocol handles from what the developer must implement, and covers all API levels from one-liners to full ACTPClient control.
 ---
 
-# Building Agents with AGIRAILS (v4.0)
+# Building Agents with AGIRAILS (v4)
 
 This skill provides guidance for building AI agents that participate in the AGIRAILS economy - either as **service providers** (selling services), **requesters** (buying services), or **full autonomous agents** (both earning and paying).
 
@@ -497,70 +497,87 @@ GOOD: "Does your agent need to pay other agents too?" (-> SOUL pattern)
 
 Every AGIRAILS agent MUST have an `AGIRAILS.md` file with YAML frontmatter fenced by `---`. The SDK's `parseAgirailsMd()` parser requires this format. **Do NOT generate AGIRAILS.md without the YAML frontmatter block.**
 
-### Minimal Template (Provider)
+### How identity files are actually generated
+
+> **Prefer `actp init` / `actp publish` over hand-writing frontmatter.** Those
+> commands emit the canonical V4 `{slug}.md` and stamp the publish metadata
+> (`config_hash`, `config_cid`, `did`, `wallet`, `agent_id`, `published_at`)
+> with the correct values. Hand-templating risks the exact drift this skill
+> used to ship: an old V1 schema the SDK parser rejects. The template below is
+> for **understanding the shape**, not for hand-assembly in production.
+
+### Minimal Template (Provider) — canonical V4 schema
 
 ```markdown
 ---
-protocol: AGIRAILS
-version: 1.0.0
-spec: ACTP
-network: base
-currency: USDC
-fee: "1% ($0.05 min)"
-agent:
-  name: {{name}}
-  intent: {{intent}}
-  network: {{network}}
+name: {{name}}
+slug: {{slug}}                # auto-derived from name if omitted
+intent: {{intent}}            # earn | pay | both
+network: {{network}}          # testnet | mainnet | mock
+payment_mode: actp
 services:
-  - name: {{service_name}}
-    type: {{service_type}}
-    price: {{price}}
-    minBudget: {{min_budget}}
-    concurrency: {{concurrency}}
-# contracts: resolved automatically by SDK via getNetwork()
+  - type: {{service_type}}    # lowercase, hyphens (e.g. code-review). NOT "capability".
+    price: "{{price}}"
+    min_price: {{min_price}}
+    max_price: {{max_price}}
+pricing:
+  base: {{price}}
+  currency: USDC
+  unit: job
+  min_price: {{min_price}}
+  max_price: {{max_price}}
+  negotiable: false
+sla:
+  response: 30s
+  delivery: 1-2s
+  concurrency: {{concurrency}}
+  dispute_window: 48h
+covenant:
+  accepts:
+    input: {{what the requester sends — e.g. "a GitHub repo URL"}}
+  returns:
+    output: {{what your agent returns — e.g. "a structured review"}}
+payment:
+  modes:
+    - actp
+# config_hash / config_cid / did / wallet / agent_id / published_at are
+# stamped by `actp publish` — never hand-write them.
 ---
 
 # {{Agent Name}}
 
-> {{Short description}}
+> {{Short description — appears on the public profile at agirails.app/a/{{slug}}}}
 
-## Agent Identity
+## How to Request This Service
 
-- **Name**: {{name}}
-- **Version**: 1.0.0
-- **Network**: {{network}} (Base Sepolia / Base Mainnet)
-- **Intent**: {{intent}} (earn / pay / both)
-
-## Services
-
-### {{service_name}}
-
-{{Description of what the service does.}}
-
-- **Type**: `{{service_type}}`
-- **Base price**: ${{price}} USDC per job
-- **Min budget**: ${{min_budget}} USDC
-- **Concurrency**: {{concurrency}} simultaneous jobs
-
-## Payment
-
-- **Protocol**: ACTP (escrow)
-- **Currency**: USDC on Base L2
-- **Fee**: 1% platform fee (min $0.05)
-- **Flow**: Requester locks USDC -> work runs -> delivery -> dispute window -> settlement
+{{Usage example: how a requester calls this agent, expected input/output.}}
 ```
+
+For a **pay-only buyer** (`intent: pay`): omit `services` and `pricing`
+entirely, and add `servicesNeeded: [cap-a, cap-b]` (the capabilities it
+wants to buy). The buyer's `budget` is PRIVATE — never put it in the file;
+it lives in `.actp/config.json` only.
 
 ### Critical Rules
 
-1. **YAML frontmatter is REQUIRED** — must start with `---` and end with `---`
-2. **`protocol: AGIRAILS`** — must be present
-3. **`contracts`** — include addresses for the target network(s)
-4. **`services[].type`** — SDK reads `svc.type` or `svc.service_type` (NOT `capability`). Must be lowercase alphanumeric with hyphens (e.g., `text-generation`, `code-review`)
-5. **`agent.name`** — must match alphanumeric with hyphens/dots/underscores
-5. **Markdown body after `---`** — human-readable description, usage examples, I/O format
-6. **Reference the canonical template** at `SDK and Runtime/AGIRAILS.md/AGIRAILS.md` for the full field set
+1. **YAML frontmatter is REQUIRED** — must start with `---` and end with `---`.
+2. **No `protocol` / `spec` / `version` / `currency` / `fee` keys.** Those are
+   the retired V1 schema. The V4 parser (`parseAgirailsMdV4`) ignores unknown
+   keys but the canonical file does not carry them.
+3. **No `contracts` block.** Contract addresses are resolved by the SDK via
+   `getNetwork()` — never hardcoded in the file.
+4. **`services[].type`** — SDK reads `svc.type` (legacy `svc.service_type` also
+   accepted). NOT `capability`. Lowercase alphanumeric with hyphens
+   (e.g. `text-generation`, `code-review`).
+5. **`min_price` ≤ `max_price`** — an inverted band rejects every quote.
+6. **Markdown body after `---`** — the first heading is the public title; a
+   `## How to Request This Service` section is the convention for providers.
+7. **Provider only:** a pay-only buyer has no `services`/`pricing` — see the
+   buyer note above.
 
-When generating an agent with `--scaffold` or via this skill, ALWAYS create AGIRAILS.md using this template format.
+When in doubt, run `actp init` / `actp publish` and let the SDK generate the
+file. Treat this template as a reference for reading existing files, not a
+substitute for the CLI.
 
 ## Related Skills
 
